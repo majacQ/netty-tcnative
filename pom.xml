@@ -1,45 +1,45 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<!--
-  ~ Copyright 2014 The Netty Project
-  ~
-  ~ The Netty Project licenses this file to you under the Apache License,
-  ~ version 2.0 (the "License"); you may not use this file except in compliance
-  ~ with the License. You may obtain a copy of the License at:
-  ~
-  ~   http://www.apache.org/licenses/LICENSE-2.0
-  ~
-  ~ Unless required by applicable law or agreed to in writing, software
-  ~ distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-  ~ WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-  ~ License for the specific language governing permissions and limitations
-  ~ under the License.
-  -->
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+  <?xml version="1.0" encoding="iso-8859-1"?>
+  <<<<<<<
+  Copyright 2014 The Netty Project
+
+  The Netty Project licenses this file to you under the Apache License,
+  version 2.0 (the "License"); you may not use this file except in compliance
+  with the License. You may obtain a copy of the License at:
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+  WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+  License for the specific language governing permissions and limitations
+  under the License.
+
+  <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.sonatype.oss</groupId>
     <artifactId>oss-parent</artifactId>
     <version>9</version>
   </parent>
-
+  
   <groupId>io.netty</groupId>
   <artifactId>netty-tcnative-parent</artifactId>
   <version>2.0.36.Final-SNAPSHOT</version>
   <packaging>pom</packaging>
-
+  
   <name>Netty/TomcatNative [Parent]</name>
   <url>https://github.com/netty/netty-tcnative/</url>
   <description>
     A Mavenized fork of Tomcat Native which incorporates various patches
   </description>
-
+  
   <scm>
     <url>https://github.com/netty/netty-tcnative</url>
     <connection>scm:git:git://github.com/netty/netty-tcnative.git</connection>
     <developerConnection>scm:git:ssh://git@github.com/netty/netty-tcnative.git</developerConnection>
     <tag>HEAD</tag>
   </scm>
-
+  
   <properties>
     <maven.javadoc.failOnError>false</maven.javadoc.failOnError>
     <checkstyle.skip>true</checkstyle.skip>
@@ -61,9 +61,9 @@
     <aprSha256>48e9dbf45ae3fdc7b491259ffb6ccf7d63049ffacbc1c0977cced095e4c2d5a2</aprSha256>
     <boringsslBranch>chromium-stable</boringsslBranch>
     <libresslVersion>3.1.4</libresslVersion>
-    <!--
+      <<<<<<<
       See https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/SHA256 for the SHA256 signature
-    -->
+      >>>>>>>>
     <libresslSha256>414c149c9963983f805a081db5bd3aec146b5f82d529bb63875ac941b25dcbb6</libresslSha256>
     <opensslMinorVersion>1.1.1</opensslMinorVersion>
     <opensslPatchVersion>h</opensslPatchVersion>
@@ -90,7 +90,7 @@
     <jniUtilIncludeDir>${project.build.directory}/netty-jni-util/</jniUtilIncludeDir>
     <jniUtilVersion>0.0.2.Final</jniUtilVersion>
   </properties>
-
+  
   <build>
     <resources>
       <resource>
@@ -98,16 +98,16 @@
         <filtering>true</filtering>
       </resource>
     </resources>
-
+  
     <extensions>
-      <!-- Generate os.detected.classifier property -->
+      <Generate os.detected.classifier property>
       <extension>
         <groupId>kr.motd.maven</groupId>
         <artifactId>os-maven-plugin</artifactId>
         <version>1.6.2</version>
       </extension>
     </extensions>
-
+  
     <pluginManagement>
       <plugins>
         <plugin>
@@ -119,7 +119,7 @@
           <artifactId>maven-enforcer-plugin</artifactId>
           <version>${enforcer.plugin.version}</version>
           <dependencies>
-            <!-- Provides the 'requireFilesContent' enforcer rule. -->
+            <Provides the 'requireFilesContent' enforcer rule.>
             <dependency>
               <groupId>com.ceilfors.maven.plugin</groupId>
               <artifactId>enforcer-rules</artifactId>
@@ -172,7 +172,7 @@
         </plugin>
       </plugins>
     </pluginManagement>
-
+  
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -198,7 +198,7 @@
           <target>${maven.compiler.target}</target>
         </configuration>
       </plugin>
-
+  
       <plugin>
         <artifactId>maven-surefire-plugin</artifactId>
         <version>2.22.2</version>
@@ -208,9 +208,9 @@
             <include>**/*Benchmark*.java</include>
           </includes>
           <excludes>
-            <exclude>**/Abstract*</exclude>
-            <exclude>**/*TestUtil*</exclude>
-          </excludes>
+            <include>**/Abstract*</include>
+            <include>**/*TestUtil*</include>
+          </includes>
           <runOrder>random</runOrder>
           <properties>
             <property>
@@ -218,18 +218,18 @@
               <value>io.netty.build.junit.TimedOutTestsListener</value>
             </property>
           </properties>
-          <!-- Ensure the whole stacktrace is preserved when an exception is thrown. See https://issues.apache.org/jira/browse/SUREFIRE-1457 -->
+          <IMPORTANT: Must ensure the whole stacktrace is preserved when an exception is thrown. See https://issues.apache.org/jira/browse/SUREFIRE-1457>
           <trimStackTrace>false</trimStackTrace>
         </configuration>
       </plugin>
-
+  
      <plugin>
         <groupId>com.github.siom79.japicmp</groupId>
         <artifactId>japicmp-maven-plugin</artifactId>
         <version>0.14.3</version>
         <configuration>
           <parameter>
-            <ignoreMissingOldVersion>true</ignoreMissingOldVersion>
+            <ignoreMissingOldVersion>false</ignoreMissingOldVersion>
             <breakBuildOnBinaryIncompatibleModifications>true</breakBuildOnBinaryIncompatibleModifications>
             <breakBuildOnSourceIncompatibleModifications>true</breakBuildOnSourceIncompatibleModifications>
             <oldVersionPattern>\d+\.\d+\.\d+\.Final</oldVersionPattern>
@@ -245,12 +245,12 @@
           </execution>
         </executions>
       </plugin>
-
+  
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-dependency-plugin</artifactId>
         <executions>
-          <!-- unpack netty-jni-util files -->
+          <unpack netty-jni-util files>
           <execution>
             <id>unpack</id>
             <phase>generate-sources</phase>
@@ -269,7 +269,7 @@
           </execution>
         </executions>
       </plugin>
-
+  
       <plugin>
         <artifactId>maven-antrun-plugin</artifactId>
         <executions>
@@ -281,19 +281,19 @@
             </goals>
             <configuration>
               <target if="${compileLibrary}">
-                <!-- Copy all of the code from the dynamic module -->
+                <Copy all of the code from the dynamic module>
                 <delete dir="${generatedSourcesDir}" quiet="true" />
                 <copy todir="${generatedSourcesDir}" verbose="true">
                   <fileset dir="${opensslDynamicDir}/src/main" />
                 </copy>
-
+  
                 <copy todir="${generatedSourcesDir}/c" verbose="true">
                   <fileset dir="${jniUtilIncludeDir}" />
                 </copy>
               </target>
             </configuration>
           </execution>
-          <!-- Generate the source for a statically-linked modules by copying from the template -->
+          <Generate the source for a statically-linked modules by copying from the template>
           <execution>
             <id>setup-template</id>
             <phase>generate-sources</phase>
@@ -302,8 +302,8 @@
             </goals>
             <configuration>
               <target if="${linkStatic}">
-
-                <!-- Convert the paths to windows format -->
+  
+                <Convert the paths to windows format>
                 <pathconvert property="aprHomeWindowsPath" targetos="windows">
                   <path location="${aprHome}" />
                 </pathconvert>
@@ -322,7 +322,7 @@
                 <echo message="Setting SSL_LIB_DIRS=${sslLibDirsWindowsPath}" />
                 <echo message="Setting SSL_LIBS=${msvcSslLibs}" />
 
-                <!-- Copy and filter the template MSVC project -->
+                <Copy and filter the template MSVC project>
                 <filter token="APR_INCLUDE_DIR" value="${aprIncludeDir}" />
                 <filter token="APR_LIB_DIR" value="${aprLibDir}" />
                 <filter token="SSL_INCLUDE_DIRS" value="${sslIncludeDirsWindowsPath}" />
@@ -332,8 +332,8 @@
               </target>
             </configuration>
           </execution>
-
-          <!-- Generate bnd bundle manifest. -->
+  
+          <Generate bnd bundle manifest.>
           <execution>
             <id>native-manifest</id>
             <phase>initialize</phase>
@@ -346,11 +346,11 @@
                 <condition property="tcnative.snippet" value="libnetty_tcnative_${nativeLibOsParts}.so;osname=linux">
                   <equals arg1="${os.detected.name}" arg2="linux" />
                 </condition>
-                <!-- In OSGi specification, the alias of Windows family is win32, case insensitive -->
+                <In OSGi specification, the alias of Windows family is win32, case insensitive>
                 <condition property="tcnative.snippet" value="netty_tcnative_${nativeLibOsParts}.dll;osname=win32">
                   <equals arg1="${os.detected.name}" arg2="windows" />
                 </condition>
-                <!-- In OSGi specification, the alias of OSX family is macos or macosx, case insensitive -->
+                <In OSGi specification, the alias of OSX family is macos or macosx, case insensitive>
                 <condition property="tcnative.snippet" value="libnetty_tcnative_${nativeLibOsParts}.jnilib;osname=macosx;">
                   <equals arg1="${os.detected.name}" arg2="osx" />
                 </condition>
@@ -361,8 +361,8 @@
           </execution>
         </executions>
       </plugin>
-
-      <!-- This artifact exports the classes whose names are different from the artifactId. -->
+  
+      <This artifact exports the classes whose names are different from the artifactId.>
       <plugin>
         <groupId>org.apache.felix</groupId>
         <artifactId>maven-bundle-plugin</artifactId>
@@ -386,12 +386,12 @@
           </execution>
         </executions>
       </plugin>
-
-      <!-- Override the parent POM's configuration -->
+  
+      <Override the parent POM's configuration>
       <plugin>
         <artifactId>maven-release-plugin</artifactId>
         <configuration>
-          <!-- Specifying a profile here will disable the all profile, since it's activeByDefault -->
+          <Specifying a profile here will disable the all profile, since it's activeByDefault>
           <arguments>-Prestricted-release,sonatype-oss-release -DmoduleSelector=none</arguments>
           <tagNameFormat>@{project.artifactId}-@{project.version}</tagNameFormat>
           <autoVersionSubmodules>true</autoVersionSubmodules>
@@ -399,7 +399,7 @@
       </plugin>
     </plugins>
   </build>
-
+  
   <dependencies>
     <dependency>
       <groupId>io.netty</groupId>
@@ -424,8 +424,8 @@
         </os>
       </activation>
     </profile>
-
-    <!-- Build the static APR library -->
+  
+    <Build the static APR library>
     <profile>
       <id>build-apr-windows</id>
       <activation>
@@ -434,10 +434,10 @@
         </os>
       </activation>
       <properties>
-        <!--
+          <<<<<<<
           We use APR 1.6.5 on windows as 1.7.0 doesn't compile anymore on the platforms we support
           See also https://programmersought.com/article/94732742066/
-        -->
+          >>>>>>>
         <aprVersion>1.6.5</aprVersion>
         <aprSha256>70dcf9102066a2ff2ffc47e93c289c8e54c95d8dda23b503f9e61bb0cbd2d105</aprSha256>
       </properties>
@@ -454,9 +454,9 @@
                 </goals>
                 <configuration>
                   <target if="${linkStatic}">
-                    <!-- Add the ant tasks from ant-contrib -->
+                    <Add the ant tasks from ant-contrib>
                     <taskdef resource="net/sf/antcontrib/antcontrib.properties" />
-
+  
                     <if>
                       <available file="${aprSourceDir}" />
                       <then>
@@ -464,7 +464,7 @@
                       </then>
                       <else>
                         <echo message="Downloading APR" />
-
+  
                         <property name="aprArchiveFile" value="apr-${aprVersion}-win32-src.zip" />
                         <get src="http://archive.apache.org/dist/apr/${aprArchiveFile}" dest="${project.build.directory}/${aprArchiveFile}" verbose="on" />
                         <unzip src="${project.build.directory}/${aprArchiveFile}" dest="${project.build.directory}" />
@@ -485,9 +485,9 @@
                 </goals>
                 <configuration>
                   <target if="${linkStatic}">
-                    <!-- Add the ant tasks from ant-contrib -->
+                    <Add the ant tasks from ant-contrib>
                     <taskdef resource="net/sf/antcontrib/antcontrib.properties" />
-
+  
                     <if>
                       <available file="${aprHome}" />
                       <then>
@@ -495,12 +495,12 @@
                       </then>
                       <else>
                         <echo message="Building APR" />
-
+  
                         <condition property="windowsRelease" value="Win32 Release" else="x64 Release">
                           <equals arg1="${archBits}" arg2="32" />
                         </condition>
                         <echo message="archBits=${archBits}. Using windowsRelease=${windowsRelease}" />
-                        <!-- On Windows, force building APR with /MT for static linking -->
+                        <On Windows, force building APR with /MT for static linking>
                         <replace dir="${aprSourceDir}" token="/MD" value="/MT">
                           <include name="*.mak" />
                         </replace>
@@ -545,7 +545,7 @@
                 </goals>
                 <configuration>
                   <target if="${linkStatic}">
-                    <!-- Add the ant tasks from ant-contrib -->
+                    <Add the ant tasks from ant-contrib>
                     <taskdef resource="net/sf/antcontrib/antcontrib.properties" />
 
                     <if>
@@ -579,7 +579,7 @@
                 </goals>
                 <configuration>
                   <target if="${linkStatic}">
-                    <!-- Add the ant tasks from ant-contrib -->
+                    <Add the ant tasks from ant-contrib>
                     <taskdef resource="net/sf/antcontrib/antcontrib.properties" />
 
                     <if>
@@ -591,13 +591,13 @@
                         <echo message="Building APR" />
                         <mkdir dir="${aprHome}" />
 
-                        <!-- 
+                          <<<<<<<
                           We need to patch APR on macOS to be able to compile it on macOS 11 as well. 
                           Let's just re-use the same patch that homebrew is using
                           https://github.com/Homebrew/homebrew-core/pull/56849 
 
                           This should be removed again once apr 1.7.1 was released with the fix included.
-                        -->
+                          >>>>>>>
                         <if>
                           <equals arg1="${os.detected.name}" arg2="osx" />
                           <then>
@@ -627,7 +627,7 @@
       </build>
     </profile>
 
-    <!--
+    <<<<<<<
       netty-tcnative must be released from RHEL 6.6 x86_64 or compatible so that:
 
       1) we ship x86_64 version of epoll transport officially, and
@@ -635,7 +635,7 @@
 
          The shared library built on a distribution with newer GLIBC
          will not run on older distributions.
-    -->
+   >>>>>>>
     <profile>
       <id>restricted-release</id>
       <build>
@@ -651,8 +651,8 @@
                 <configuration>
                   <rules>
                     <requireJavaVersion>
-                      <!-- Enforce JDK 1.8+ for compilation. -->
-                      <!-- This is needed because of java.util.zip.Deflater and NIO UDP multicast. -->
+                      <Enforce JDK 1.8+ for compilation.>
+                      <This is needed because of java.util.zip.Deflater and NIO UDP multicast.>
                       <version>[1.8.0,)</version>
                     </requireJavaVersion>
                     <requireProperty>
@@ -676,7 +676,7 @@
               </execution>
             </executions>
             <dependencies>
-              <!-- Provides the 'requireFilesContent' enforcer rule. -->
+              <Provides the 'requireFilesContent' enforcer rule.>
               <dependency>
                 <groupId>com.ceilfors.maven.plugin</groupId>
                 <artifactId>enforcer-rules</artifactId>
@@ -687,16 +687,15 @@
         </plugins>
       </build>
       <modules>
-        <!-- When doing a release we only want to deploy dynamic openssl version and the static boring one. -->
+        <When doing a release we only want to deploy dynamic openssl version and the static boring one.>
         <module>openssl-dynamic</module>
         <module>boringssl-static</module>
       </modules>
     </profile>
 
-    <!--
-      Profile for building all modules. This is enabled by default so if any profile is manually specified,
-      this will be disabled automatically.
-    -->
+    Profile for building all modules. This is enabled by default so if any profile is manually specified,
+    this will be disabled automatically.
+   
     <profile>
       <id>all</id>
       <activation>
@@ -718,7 +717,7 @@
         <jdk>9</jdk>
       </activation>
       <properties>
-        <!-- Needed because of https://issues.apache.org/jira/browse/MENFORCER-275 -->
+        <Needed because of https://issues.apache.org/jira/browse/MENFORCER-275>
         <enforcer.plugin.version>3.0.0-M1</enforcer.plugin.version>
       </properties>
     </profile>
@@ -729,7 +728,7 @@
         <jdk>10</jdk>
       </activation>
       <properties>
-        <!-- Needed because of https://issues.apache.org/jira/browse/MENFORCER-275 -->
+        <Needed because of https://issues.apache.org/jira/browse/MENFORCER-275>
         <enforcer.plugin.version>3.0.0-M1</enforcer.plugin.version>
       </properties>
     </profile>
@@ -740,7 +739,7 @@
         <jdk>11</jdk>
       </activation>
       <properties>
-        <!-- Needed because of https://issues.apache.org/jira/browse/MENFORCER-275 -->
+        <Needed because of https://issues.apache.org/jira/browse/MENFORCER-275>
         <enforcer.plugin.version>3.0.0-M1</enforcer.plugin.version>
       </properties>
     </profile>
@@ -751,13 +750,14 @@
         <jdk>12</jdk>
       </activation>
       <properties>
-        <!-- Needed because of https://issues.apache.org/jira/browse/MENFORCER-275 -->
+        <Needed because of https://issues.apache.org/jira/browse/MENFORCER-275>
         <enforcer.plugin.version>3.0.0-M1</enforcer.plugin.version>
 
-        <!-- This is the minimum supported by Java12 -->
+        <This is the minimum supported by Java12>
         <maven.compiler.source>1.7</maven.compiler.source>
         <maven.compiler.target>1.7</maven.compiler.target>
       </properties>
     </profile>
   </profiles>
 </project>
+ 
