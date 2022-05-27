@@ -92,7 +92,7 @@
     <skipJapicmp>false</skipJapicmp>
     <compileLibrary>false</compileLibrary>
     <jniUtilIncludeDir>${project.build.directory}/netty-jni-util/</jniUtilIncludeDir>
-    <jniUtilVersion>0.0.3.Final</jniUtilVersion>
+    <jniUtilVersion>0.0.6.Final</jniUtilVersion>
   </properties>
 
   <build>
@@ -286,13 +286,13 @@
             <configuration>
               <target if="${compileLibrary}">
                 <!-- Copy all of the code from the dynamic module -->
-                <delete dir="${generatedSourcesDir}" quiet="true" />
+                <delete dir="${generatedSourcesDir}" quiet="true"/>
                 <copy todir="${generatedSourcesDir}" verbose="true">
-                  <fileset dir="${opensslDynamicDir}/src/main" />
+                  <fileset dir="${opensslDynamicDir}/src/main"/>
                 </copy>
 
                 <copy todir="${generatedSourcesDir}/c" verbose="true">
-                  <fileset dir="${jniUtilIncludeDir}" />
+                  <fileset dir="${jniUtilIncludeDir}"/>
                 </copy>
               </target>
             </configuration>
@@ -309,30 +309,30 @@
 
                 <!-- Convert the paths to windows format -->
                 <pathconvert property="aprHomeWindowsPath" targetos="windows">
-                  <path location="${aprHome}" />
+                  <path location="${aprHome}"/>
                 </pathconvert>
                 <pathconvert property="sslIncludeDirsWindowsPath" targetos="windows">
-                  <path location="${msvcSslIncludeDirs}" />
+                  <path location="${msvcSslIncludeDirs}"/>
                 </pathconvert>
                 <pathconvert property="sslLibDirsWindowsPath" targetos="windows">
-                  <path location="${msvcSslLibDirs}" />
+                  <path location="${msvcSslLibDirs}"/>
                 </pathconvert>
-                <property name="aprIncludeDir" value="${aprHomeWindowsPath}\include" />
-                <property name="aprLibDir" value="${aprHomeWindowsPath}\lib" />
+                <property name="aprIncludeDir" value="${aprHomeWindowsPath}\include"/>
+                <property name="aprLibDir" value="${aprHomeWindowsPath}\lib"/>
 
-                <echo message="Setting APR_INCLUDE_DIR=${aprIncludeDir}" />
-                <echo message="Setting APR_LIB_DIR=${aprLibDir}" />
-                <echo message="Setting SSL_INCLUDE_DIRS=${sslIncludeDirsWindowsPath}" />
-                <echo message="Setting SSL_LIB_DIRS=${sslLibDirsWindowsPath}" />
-                <echo message="Setting SSL_LIBS=${msvcSslLibs}" />
+                <echo message="Setting APR_INCLUDE_DIR=${aprIncludeDir}"/>
+                <echo message="Setting APR_LIB_DIR=${aprLibDir}"/>
+                <echo message="Setting SSL_INCLUDE_DIRS=${sslIncludeDirsWindowsPath}"/>
+                <echo message="Setting SSL_LIB_DIRS=${sslLibDirsWindowsPath}"/>
+                <echo message="Setting SSL_LIBS=${msvcSslLibs}"/>
 
                 <!-- Copy and filter the template MSVC project -->
-                <filter token="APR_INCLUDE_DIR" value="${aprIncludeDir}" />
-                <filter token="APR_LIB_DIR" value="${aprLibDir}" />
-                <filter token="SSL_INCLUDE_DIRS" value="${sslIncludeDirsWindowsPath}" />
-                <filter token="SSL_LIB_DIR" value="${sslLibDirsWindowsPath}" />
-                <filter token="SSL_LIBS" value="${msvcSslLibs}" />
-                <copy file="${vsStaticTemplateFile}" tofile="${generatedSourcesDir}/native-package/vs2010.vcxproj" filtering="true" overwrite="true" verbose="true" />
+                <filter token="APR_INCLUDE_DIR" value="${aprIncludeDir}"/>
+                <filter token="APR_LIB_DIR" value="${aprLibDir}"/>
+                <filter token="SSL_INCLUDE_DIRS" value="${sslIncludeDirsWindowsPath}"/>
+                <filter token="SSL_LIB_DIR" value="${sslLibDirsWindowsPath}"/>
+                <filter token="SSL_LIBS" value="${msvcSslLibs}"/>
+                <copy file="${vsStaticTemplateFile}" tofile="${generatedSourcesDir}/native-package/vs2010.vcxproj" filtering="true" overwrite="true" verbose="true"/>
               </target>
             </configuration>
           </execution>
@@ -348,24 +348,24 @@
               <exportAntProperties>true</exportAntProperties>
               <target>
                 <condition property="tcnative.snippet" value="libnetty_tcnative_${nativeLibOsParts}.so;osname=linux">
-                  <equals arg1="${os.detected.name}" arg2="linux" />
+                  <equals arg1="${os.detected.name}" arg2="linux"/>
                 </condition>
                 <!-- In OSGi specification, the alias of Windows family is win32, case insensitive -->
                 <condition property="tcnative.snippet" value="netty_tcnative_${nativeLibOsParts}.dll;osname=win32">
-                  <equals arg1="${os.detected.name}" arg2="windows" />
+                  <equals arg1="${os.detected.name}" arg2="windows"/>
                 </condition>
                 <!-- In OSGi specification, the alias of OSX family is macos or macosx, case insensitive -->
                 <condition property="tcnative.snippet" value="libnetty_tcnative_${nativeLibOsParts}.jnilib;osname=macosx;">
-                  <equals arg1="${os.detected.name}" arg2="osx" />
+                  <equals arg1="${os.detected.name}" arg2="osx"/>
                 </condition>
 
                 <!-- In OSGi specification, the alias of x86_32 is x86 -->
                 <condition property="nativeCode.processor" value="x86" else="${os.detected.arch}">
-                  <equals arg1="${os.detected.arch}" arg2="x86_32" />
+                  <equals arg1="${os.detected.arch}" arg2="x86_32"/>
                 </condition>
 
-                <property name="tcnativeManifest" value="META-INF/native/${tcnative.snippet};processor=${nativeCode.processor}" />
-                <echo message="Bundle-NativeCode: ${tcnativeManifest}" />
+                <property name="tcnativeManifest" value="META-INF/native/${tcnative.snippet};processor=${nativeCode.processor}"/>
+                <echo message="Bundle-NativeCode: ${tcnativeManifest}"/>
 
               </target>
             </configuration>
@@ -466,23 +466,23 @@
                 <configuration>
                   <target if="${linkStatic}">
                     <!-- Add the ant tasks from ant-contrib -->
-                    <taskdef resource="net/sf/antcontrib/antcontrib.properties" />
+                    <taskdef resource="net/sf/antcontrib/antcontrib.properties"/>
 
                     <if>
-                      <available file="${aprSourceDir}" />
+                      <available file="${aprSourceDir}"/>
                       <then>
-                        <echo message="APR was already downloaded, skipping the build step." />
+                        <echo message="APR was already downloaded, skipping the build step."/>
                       </then>
                       <else>
-                        <echo message="Downloading APR" />
+                        <echo message="Downloading APR"/>
 
-                        <property name="aprArchiveFile" value="apr-${aprVersion}-win32-src.zip" />
-                        <get src="http://archive.apache.org/dist/apr/${aprArchiveFile}" dest="${project.build.directory}/${aprArchiveFile}" verbose="on" />
-                        <unzip src="${project.build.directory}/${aprArchiveFile}" dest="${project.build.directory}" />
+                        <property name="aprArchiveFile" value="apr-${aprVersion}-win32-src.zip"/>
+                        <get src="http://archive.apache.org/dist/apr/${aprArchiveFile}" dest="${project.build.directory}/${aprArchiveFile}" verbose="on"/>
+                        <unzip src="${project.build.directory}/${aprArchiveFile}" dest="${project.build.directory}"/>
                         <condition property="windowsRelease" value="Win32 Release" else="x64 Release">
-                          <equals arg1="${archBits}" arg2="32" />
+                          <equals arg1="${archBits}" arg2="32"/>
                         </condition>
-                        <move file="${project.build.directory}/apr-${aprVersion}" tofile="${aprSourceDir}" />
+                        <move file="${project.build.directory}/apr-${aprVersion}" tofile="${aprSourceDir}"/>
                       </else>
                     </if>
                   </target>
@@ -497,34 +497,34 @@
                 <configuration>
                   <target if="${linkStatic}">
                     <!-- Add the ant tasks from ant-contrib -->
-                    <taskdef resource="net/sf/antcontrib/antcontrib.properties" />
+                    <taskdef resource="net/sf/antcontrib/antcontrib.properties"/>
 
                     <if>
-                      <available file="${aprHome}" />
+                      <available file="${aprHome}"/>
                       <then>
-                        <echo message="APR was already build, skipping the build step." />
+                        <echo message="APR was already build, skipping the build step."/>
                       </then>
                       <else>
-                        <echo message="Building APR" />
+                        <echo message="Building APR"/>
 
                         <condition property="windowsRelease" value="Win32 Release" else="x64 Release">
-                          <equals arg1="${archBits}" arg2="32" />
+                          <equals arg1="${archBits}" arg2="32"/>
                         </condition>
-                        <echo message="archBits=${archBits}. Using windowsRelease=${windowsRelease}" />
+                        <echo message="archBits=${archBits}. Using windowsRelease=${windowsRelease}"/>
                         <!-- On Windows, force building APR with /MT for static linking -->
                         <replace dir="${aprSourceDir}" token="/MD" value="/MT">
-                          <include name="*.mak" />
+                          <include name="*.mak"/>
                         </replace>
                         <retry retrycount="3">
                           <exec executable="nmake" failonerror="true" dir="${aprSourceDir}" resolveexecutable="true">
-                            <arg line="/f Makefile.win ARCH=&quot;${windowsRelease}&quot; PREFIX=..\apr buildall install" />
+                            <arg line="/f Makefile.win ARCH=&quot;${windowsRelease}&quot; PREFIX=..\apr buildall install"/>
                           </exec>
                         </retry>
                         <copy todir="${aprHome}/include">
-                          <fileset dir="${aprSourceDir}/include/arch/win32" includes="*.h" />
+                          <fileset dir="${aprSourceDir}/include/arch/win32" includes="*.h"/>
                         </copy>
                         <copy todir="${aprHome}">
-                          <fileset dir="${aprSourceDir}/include/arch" includes="*.h" />
+                          <fileset dir="${aprSourceDir}/include/arch" includes="*.h"/>
                         </copy>
                       </else>
                     </if>
@@ -557,26 +557,26 @@
                 <configuration>
                   <target if="${linkStatic}">
                     <!-- Add the ant tasks from ant-contrib -->
-                    <taskdef resource="net/sf/antcontrib/antcontrib.properties" />
+                    <taskdef resource="net/sf/antcontrib/antcontrib.properties"/>
 
                     <if>
-                      <available file="${aprSourceDir}" />
+                      <available file="${aprSourceDir}"/>
                       <then>
-                        <echo message="APR was already downloaded, skipping the build step." />
+                        <echo message="APR was already downloaded, skipping the build step."/>
                       </then>
                       <else>
-                        <echo message="Downloading and unpacking APR" />
+                        <echo message="Downloading and unpacking APR"/>
 
-                        <property name="aprTarGzFile" value="apr-${aprVersion}.tar.gz" />
-                        <property name="aprTarFile" value="apr-${aprVersion}.tar" />
-                        <get src="http://archive.apache.org/dist/apr/${aprTarGzFile}" dest="${project.build.directory}/${aprTarGzFile}" verbose="on" />
-                        <checksum file="${project.build.directory}/${aprTarGzFile}" algorithm="SHA-256" property="${aprSha256}" verifyProperty="isEqual" />
-                        <gunzip src="${project.build.directory}/${aprTarGzFile}" dest="${project.build.directory}" />
+                        <property name="aprTarGzFile" value="apr-${aprVersion}.tar.gz"/>
+                        <property name="aprTarFile" value="apr-${aprVersion}.tar"/>
+                        <get src="http://archive.apache.org/dist/apr/${aprTarGzFile}" dest="${project.build.directory}/${aprTarGzFile}" verbose="on"/>
+                        <checksum file="${project.build.directory}/${aprTarGzFile}" algorithm="SHA-256" property="${aprSha256}" verifyProperty="isEqual"/>
+                        <gunzip src="${project.build.directory}/${aprTarGzFile}" dest="${project.build.directory}"/>
                         <!-- Use the tar command (rather than the untar ant task) in order to preserve file permissions. -->
                         <exec executable="tar" failonerror="true" dir="${project.build.directory}/" resolveexecutable="true">
-                          <arg line="xfvz ${aprTarGzFile}" />
+                          <arg line="xfvz ${aprTarGzFile}"/>
                         </exec>
-                        <move file="${project.build.directory}/apr-${aprVersion}" tofile="${aprSourceDir}" />
+                        <move file="${project.build.directory}/apr-${aprVersion}" tofile="${aprSourceDir}"/>
                       </else>
                     </if>
                   </target>
@@ -591,16 +591,16 @@
                 <configuration>
                   <target if="${linkStatic}">
                     <!-- Add the ant tasks from ant-contrib -->
-                    <taskdef resource="net/sf/antcontrib/antcontrib.properties" />
+                    <taskdef resource="net/sf/antcontrib/antcontrib.properties"/>
 
                     <if>
-                      <available file="${aprHome}" />
+                      <available file="${aprHome}"/>
                       <then>
-                        <echo message="APR was already build, skipping the build step." />
+                        <echo message="APR was already build, skipping the build step."/>
                       </then>
                       <else>
-                        <echo message="Building APR" />
-                        <mkdir dir="${aprHome}" />
+                        <echo message="Building APR"/>
+                        <mkdir dir="${aprHome}"/>
 
                         <!-- 
                           We need to patch APR on macOS to be able to compile it on macOS 11 as well. 
@@ -610,22 +610,22 @@
                           This should be removed again once apr 1.7.1 was released with the fix included.
                         -->
                         <if>
-                          <equals arg1="${os.detected.name}" arg2="osx" />
+                          <equals arg1="${os.detected.name}" arg2="osx"/>
                           <then>
-                             <echo message="Patching APR to make it's build scripts work on macOS 11" />
-                             <get src="https://raw.githubusercontent.com/Homebrew/formula-patches/7e2246542543bbd3111a4ec29f801e6e4d538f88/apr/${aprPatchFile}" dest="${project.build.directory}/${aprPatchFile}" verbose="on" />
-                             <checksum file="${project.build.directory}/${aprPatchFile}" algorithm="SHA-256" property="${aprPatchFileSha256}" verifyProperty="isEqual" />
-                             <patch patchfile="${project.build.directory}/${aprPatchFile}" strip="0" dir="${aprSourceDir}" />
-                             <exec executable="buildconf" failonerror="true" dir="${aprSourceDir}" resolveexecutable="true" />
+                             <echo message="Patching APR to make it's build scripts work on macOS 11"/>
+                             <get src="https://raw.githubusercontent.com/Homebrew/formula-patches/7e2246542543bbd3111a4ec29f801e6e4d538f88/apr/${aprPatchFile}" dest="${project.build.directory}/${aprPatchFile}" verbose="on"/>
+                             <checksum file="${project.build.directory}/${aprPatchFile}" algorithm="SHA-256" property="${aprPatchFileSha256}" verifyProperty="isEqual"/>
+                             <patch patchfile="${project.build.directory}/${aprPatchFile}" strip="0" dir="${aprSourceDir}"/>
+                             <exec executable="buildconf" failonerror="true" dir="${aprSourceDir}" resolveexecutable="true"/>
                           </then>
                         </if>
 
                         <exec executable="configure" failonerror="true" dir="${aprSourceDir}" resolveexecutable="true">
-                          <arg line="--disable-shared --prefix=${aprHome} CFLAGS='-O3 -fno-omit-frame-pointer -fPIC' ${macOsxDeploymentTarget}" />
+                          <arg line="--disable-shared --prefix=${aprHome} CFLAGS='-O3 -fno-omit-frame-pointer -fPIC' ${macOsxDeploymentTarget}"/>
                         </exec>
-                        <exec executable="make" failonerror="true" dir="${aprSourceDir}" resolveexecutable="true" />
+                        <exec executable="make" failonerror="true" dir="${aprSourceDir}" resolveexecutable="true"/>
                         <exec executable="make" failonerror="true" dir="${aprSourceDir}" resolveexecutable="true">
-                          <arg line="install" />
+                          <arg line="install"/>
                         </exec>
                       </else>
                     </if>
