@@ -534,6 +534,20 @@ public final class SSLContext {
      */
     public static native void setSniHostnameMatcher(long ctx, SniHostNameMatcher matcher);
 
+    /**
+     * Allow to hook {@link KeyLogCallback} into the debug infrastructor of the native TLS implementation.
+     * This will call {@code SSL_CTX_set_keylog_callback} and so replace the existing reference.
+     * This is intended for debugging use with tools like Wireshark.
+     * <p>
+     * <strong>Warning:</strong> The log output will contain secret key material, and can be used to decrypt
+     * TLS sessions! The log output should be handled with the same care given to the private keys.
+     * @param ctx Server or Client context to use.
+     * @param callback the callback to call when delivering debug output.
+     * @return {@code true} if the key-log callback was assigned,
+     * otherwise {@code false} if key-log callbacks are not supported.
+     */
+    public static native boolean setKeyLogCallback(long ctx, KeyLogCallback callback);
+
     private static byte[] protocolsToWireFormat(String[] protocols) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try {
@@ -649,6 +663,35 @@ public final class SSLContext {
     public static native void setUseTasks(long ctx, boolean useTasks);
 
     /**
+     * Adds a certificate compression algorithm to the given {@link SSLContext} or throws an
+     * exception if certificate compression is not supported or the algorithm not recognized.
+     * For servers, algorithm preference order is dictated by the order of algorithm registration.
+     * Most preferred algorithm should be registered first.
+     *
+     * This method is currently only supported when {@code BoringSSL} is used.
+     *
+     * <a href="https://commondatastorage.googleapis.com/chromium-boringssl-docs/ssl.h.html#Certificate-compression">
+     *     SSL_CTX_add_cert_compression_alg</a>
+     * <a href="https://www.ietf.org/rfc/rfc8879.txt">rfc8879</a>
+     *
+     * @param ctx       context, to which, the algorithm should be added.
+     * @param direction indicates whether decompression support should be advertized, compression should be applied for
+     *                  peers which support it, or both. This allows the caller to support one way compression only.
+     * <PRE>
+     * {@link SSL#SSL_CERT_COMPRESSION_DIRECTION_COMPRESS}
+     * {@link SSL#SSL_CERT_COMPRESSION_DIRECTION_DECOMPRESS}
+     * {@link SSL#SSL_CERT_COMPRESSION_DIRECTION_BOTH}
+     * </PRE>
+     * @param algorithm implementation of the compression and or decompression algorithm as a {@link CertificateCompressionAlgo}
+     * @return one on success or zero on error
+     */
+    public static int addCertificateCompressionAlgorithm(long ctx, int direction, final CertificateCompressionAlgo algorithm) {
+        return addCertificateCompressionAlgorithm0(ctx, direction, algorithm.algorithmId(), algorithm);
+    }
+
+    private static native int addCertificateCompressionAlgorithm0(long ctx, int direction, int algorithmId, final CertificateCompressionAlgo algorithm);
+
+    /**
      * Set the {@link SSLPrivateKeyMethod} to use for the given {@link SSLContext}.
      * This allows to offload private key operations
      * if needed.
@@ -694,4 +737,41 @@ public final class SSLContext {
      * @return {@code true} if successful, {@code false} otherwise.
      */
     public static native boolean setNumTickets(long ctx, int tickets);
+
+    /**
+     * Sets the curves to use.
+     *
+     * See <a href="https://www.openssl.org/docs/man1.1.0/man3/SSL_CTX_set1_curves_list.html">SSL_CTX_set1_curves_list</a>.
+     * @param ctx context to use
+     * @param curves the curves to use.
+     * @return {@code true} if successful, {@code false} otherwise.
+     */
+    public static boolean setCurvesList(long ctx, String... curves) {
+        if (curves == null) {
+            throw new NullPointerException("curves");
+        }
+        if (curves.length == 0) {
+            throw new IllegalArgumentException();
+        }
+        StringBuilder sb = new StringBuilder();
+        for (String curve: curves) {
+            sb.append(curve);
+            // Curves are separated by : as explained in the manpage.
+            sb.append(':');
+        }
+        sb.setLength(sb.length() - 1);
+        return setCurvesList0(ctx, sb.toString());
+    }
+
+    private static native boolean setCurvesList0(long ctx, String curves);
+
+    /**
+     * Set the maximum number of bytes for the certificate chain during handshake.
+     * See
+     * <a href="https://www.openssl.org/docs/man1.1.1/man3/SSL_CTX_set_max_cert_list.html">SSL_CTX_set_max_cert_list</a>
+     * for more details.
+     * @param ctx context to use
+     * @param size the maximum number of bytes
+     */
+    public static native void setMaxCertList(long ctx, int size);
 }

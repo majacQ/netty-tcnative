@@ -19,7 +19,7 @@
   <parent>
     <groupId>io.netty</groupId>
     <artifactId>netty-tcnative-parent</artifactId>
-    <version>2.0.41.Final-SNAPSHOT</version>
+    <version>2.0.71.Final-SNAPSHOT</version>
   </parent>
   <artifactId>netty-tcnative-openssl-static</artifactId>
   <packaging>jar</packaging>
@@ -37,6 +37,9 @@
     <compileLibrary>true</compileLibrary>
     <!-- Don't deploy this artifact to Maven Central -->
     <maven.deploy.skip>true</maven.deploy.skip>
+    <skipJapicmp>true</skipJapicmp>
+    <!-- We need to use the same module name for all our "native" impls as only one should be loaded -->
+    <javaModuleName>${javaDefaultModuleName}</javaModuleName>
   </properties>
 
   <build>
@@ -48,7 +51,7 @@
           <configuration>
             <archive>
               <manifestEntries>
-                <Automatic-Module-Name>io.netty.tcnative.openssl</Automatic-Module-Name>
+                <Fragment-Host>io.netty.tcnative-classes</Fragment-Host>
               </manifestEntries>
             </archive>
           </configuration>
@@ -106,7 +109,7 @@
             <configuration>
               <target>
                 <copy todir="${nativeJarWorkdir}">
-                  <zipfileset src="${defaultJarFile}" />
+                  <zipfileset src="${defaultJarFile}" excludes="META-INF/versions/**/module-info.class" />
                 </copy>
                 <copy todir="${nativeJarWorkdir}" includeEmptyDirs="false">
                   <zipfileset dir="${nativeLibOnlyDir}/META-INF/native" />
@@ -122,7 +125,12 @@
                   <fileset dir="${nativeJarWorkdir}/META-INF/native/" />
                   <globmapper from="netty_tcnative.*" to="netty_tcnative_${os.detected.name}_${jniArch}.*" />
                 </move>
-                 
+
+                <!-- Append the Bundle-NativeCode section -->
+                <manifest file="${nativeJarWorkdir}/META-INF/MANIFEST.MF" mode="update">
+                  <attribute name="Bundle-NativeCode" value="${tcnativeManifest}" />
+                </manifest>
+
                 <jar destfile="${nativeJarFile}" manifest="${nativeJarWorkdir}/META-INF/MANIFEST.MF" basedir="${nativeJarWorkdir}" index="true" excludes="META-INF/MANIFEST.MF,META-INF/INDEX.LIST" />
                 <!-- Adjust the classifier used for different OS distributions which provide differently-built openSSL libraries -->
                 <condition property="classifier" value="${jniClassifier}-fedora">
@@ -153,7 +161,7 @@
       <!-- Configure the distribution statically linked against OpenSSL and APR -->
       <plugin>
         <groupId>org.fusesource.hawtjni</groupId>
-        <artifactId>maven-hawtjni-plugin</artifactId>
+        <artifactId>hawtjni-maven-plugin</artifactId>
         <executions>
           <execution>
             <id>build-native-lib</id>
@@ -181,8 +189,47 @@
           </execution>
         </executions>
       </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <executions>
+          <!-- We must generate a -javadoc JAR file to publish on Maven Central -->
+          <execution>
+            <id>empty-javadoc-jar</id>
+            <phase>package</phase>
+            <goals>
+              <goal>jar</goal>
+            </goals>
+            <configuration>
+              <classifier>javadoc</classifier>
+              <classesDirectory>${basedir}/javadoc</classesDirectory>
+            </configuration>
+          </execution>
+          <!-- We must generate a -sources JAR file to publish on Maven Central -->
+          <execution>
+            <id>sources-jar</id>
+            <phase>package</phase>
+            <goals>
+              <goal>jar</goal>
+            </goals>
+            <configuration>
+              <classifier>sources</classifier>
+              <classesDirectory>${generatedSourcesDir}/c</classesDirectory>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
     </plugins>
   </build>
+
+  <dependencies>
+    <dependency>
+      <groupId>${project.groupId}</groupId>
+      <artifactId>netty-tcnative-classes</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+  </dependencies>
 
   <profiles>
     <profile>
@@ -373,7 +420,7 @@
                         <echo message="Building OpenSSL" />
                         <mkdir dir="${opensslHome}" />
                         <exec executable="config" failonerror="true" dir="${opensslSourceDir}" resolveexecutable="true">
-                          <arg line="-O3 -fno-omit-frame-pointer -fPIC no-ssl2 no-ssl3 no-shared no-comp -DOPENSSL_NO_HEARTBEATS --prefix=${opensslHome} --openssldir=${opensslHome}" />
+                          <arg line="-O3 -fno-omit-frame-pointer -fPIC no-ssl2 no-ssl3 no-shared no-comp -DOPENSSL_NO_HEARTBEATS --prefix=${opensslHome} --openssldir=${opensslHome} --libdir=lib" />
                         </exec>
                         <exec executable="make" failonerror="true" dir="${opensslSourceDir}" resolveexecutable="true">
                           <arg value="depend" />
@@ -469,9 +516,21 @@
                       <else>
                         <echo message="Building OpenSSL" />
                         <mkdir dir="${opensslHome}" />
-                        <exec executable="Configure" failonerror="true" dir="${opensslSourceDir}" resolveexecutable="true">
-                          <arg line="darwin64-x86_64-cc -O3 -fno-omit-frame-pointer -fPIC no-ssl2 no-ssl3 no-shared no-comp -DOPENSSL_NO_HEARTBEATS --prefix=${opensslHome} --openssldir=${opensslHome} ${macOsxDeploymentTarget}" />
-                        </exec>
+                        <if>
+                          <equals arg1="${os.arch}" arg2="aarch64" />
+                          <!-- Don't try to compile the tests as this currently fails: https://github.com/openssl/openssl/issues/18720 -->
+                          <then>
+                            <exec executable="Configure" failonerror="true" dir="${opensslSourceDir}" resolveexecutable="true">
+                              <arg line="darwin64-arm64-cc no-tests -O3 -fno-omit-frame-pointer -fPIC no-ssl2 no-ssl3 no-shared no-comp -DOPENSSL_NO_HEARTBEATS --prefix=${opensslHome} --openssldir=${opensslHome} ${macOsxDeploymentTarget}" />
+                            </exec>
+                          </then>
+                          <else>
+                            <exec executable="Configure" failonerror="true" dir="${opensslSourceDir}" resolveexecutable="true">
+                              <arg line="darwin64-x86_64-cc no-tests -O3 -fno-omit-frame-pointer -fPIC no-ssl2 no-ssl3 no-shared no-comp -DOPENSSL_NO_HEARTBEATS --prefix=${opensslHome} --openssldir=${opensslHome} ${macOsxDeploymentTarget}" />
+                            </exec>
+                          </else>
+                        </if>
+
                         <exec executable="make" failonerror="true" dir="${opensslSourceDir}" resolveexecutable="true">
                           <arg value="depend" />
                         </exec>
