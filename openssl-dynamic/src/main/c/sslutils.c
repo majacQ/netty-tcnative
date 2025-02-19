@@ -109,7 +109,7 @@ const char* tcn_SSL_cipher_authentication_method(const SSL_CIPHER* cipher){
                 default:
                     return TCN_UNKNOWN_AUTH_METHOD;
             }
-#ifndef OPENSSL_NO_TLS1_3
+#if !defined(OPENSSL_NO_TLS1_3) && !defined(LIBRESSL_VERSION_NUMBER)
         case NID_kx_any:
             // Let us just pick one as we could use whatever we want.
             // See https://www.openssl.org/docs/man1.1.1/man3/SSL_CIPHER_get_kx_nid.html
@@ -197,7 +197,6 @@ void *tcn_SSL_get_app_state(const SSL *ssl)
 void tcn_SSL_set_app_state(SSL *ssl, void *arg)
 {
     SSL_set_ex_data(ssl, tcn_SSL_app_state_idx, (char *)arg);
-    return;
 }
 
 void *tcn_SSL_CTX_get_app_state(const SSL_CTX *ctx)
@@ -208,7 +207,6 @@ void *tcn_SSL_CTX_get_app_state(const SSL_CTX *ctx)
 void tcn_SSL_CTX_set_app_state(SSL_CTX *ctx, void *arg)
 {
     SSL_CTX_set_ex_data(ctx, tcn_SSL_CTX_app_state_idx, (char *)arg);
-    return;
 }
 
 
@@ -217,8 +215,9 @@ int tcn_SSL_password_callback(char *buf, int bufsiz, int verify,
 {
     char *password = (char *) cb;
 
-    if (buf == NULL || password == NULL)
+    if (buf == NULL || password == NULL) {
         return 0;
+    }
     *buf = '\0';
 
     if (password[0]) {
@@ -230,6 +229,7 @@ int tcn_SSL_password_callback(char *buf, int bufsiz, int verify,
     return (int)strlen(buf);
 }
 
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
 static unsigned char dh0512_p[]={
     0xD9,0xBA,0xBF,0xFD,0x69,0x38,0xC9,0x51,0x2D,0x19,0x37,0x39,
     0xD7,0x7D,0x7E,0x3E,0x25,0x58,0x55,0x94,0x90,0x60,0x93,0x7A,
@@ -378,16 +378,17 @@ DH *tcn_SSL_dh_get_tmp_param(int key_len)
 {
     DH *dh = NULL;
 
-    if (key_len == 512)
+    if (key_len == 512) {
         dh = get_dh(SSL_TMP_KEY_DH_512);
-    else if (key_len == 1024)
+    } else if (key_len == 1024) {
         dh = get_dh(SSL_TMP_KEY_DH_1024);
-    else if (key_len == 2048)
+    } else if (key_len == 2048) {
         dh = get_dh(SSL_TMP_KEY_DH_2048);
-    else if (key_len == 4096)
+    } else if (key_len == 4096) {
         dh = get_dh(SSL_TMP_KEY_DH_4096);
-    else
+    } else {
         dh = get_dh(SSL_TMP_KEY_DH_1024);
+    }
     return dh;
 }
 
@@ -434,6 +435,7 @@ DH *tcn_SSL_callback_tmp_DH_4096(SSL *ssl, int export, int keylen)
 {
     return (DH *)SSL_temp_keys[SSL_TMP_KEY_DH_4096];
 }
+#endif // OPENSSL_VERSION_NUMBER < 0x30000000L
 
 /*
  * Read a file that optionally contains the server certificate in PEM
@@ -445,8 +447,9 @@ int tcn_SSL_CTX_use_certificate_chain(SSL_CTX *ctx, const char *file, bool skipf
     BIO *bio = NULL;
     int n;
 
-    if ((bio = BIO_new(BIO_s_file())) == NULL)
+    if ((bio = BIO_new(BIO_s_file())) == NULL) {
         return -1;
+    }
     if (BIO_read_filename(bio, file) <= 0) {
         BIO_free(bio);
         return -1;

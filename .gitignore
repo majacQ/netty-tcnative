@@ -27,9 +27,6 @@
 # Mac-specific directory that no other operating system needs.
 .DS_Store
 
-# Do not include stuff in the static modules as this is generated during the build
-*-static/src
-
 # exclude mainframer files
 mainframer
 .mainframer
@@ -43,3 +40,6 @@ cmake-*
 */.docker-sync
 
 .vscode
+
+# exclude file created by the flatten plugin
+.flattened-pom.xml

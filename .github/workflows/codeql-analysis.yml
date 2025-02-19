@@ -5,6 +5,8 @@
 # or to provide custom queries or build logic.
 name: "CodeQL"
 
+permissions: read-all
+
 on:
   push:
     branches: [main]
@@ -19,7 +21,11 @@ env:
 jobs:
   analyze:
     name: Analyze
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
+
+    permissions:
+      security-events: write
+      
     strategy:
       fail-fast: false
       matrix:
@@ -31,10 +37,11 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
 
     # Cache .m2/repository
-    - uses: actions/cache@v2
+    - uses: actions/cache@v4
+      continue-on-error: true
       with:
         path: ~/.m2/repository
         key: analyze-${{ matrix.language }}-cache-m2-repository-${{ hashFiles('**/pom.xml') }}
@@ -43,7 +50,7 @@ jobs:
 
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@v1
+      uses: github/codeql-action/init@v2
       with:
         languages: ${{ matrix.language }}
         # If you wish to specify custom queries, you can do so here or in a config file.
@@ -54,7 +61,7 @@ jobs:
     # Autobuild attempts to build any compiled languages  (C/C++, C#, or Java).
     # If this step fails, then you should remove it and run the build manually (see below)
     # - name: Autobuild
-    #  uses: github/codeql-action/autobuild@v1
+    #  uses: github/codeql-action/autobuild@v2
 
     # ℹ️ Command-line programs to run using the OS shell.
     # 📚 https://git.io/JvXDl
@@ -64,10 +71,10 @@ jobs:
     #    uses a compiled language
 
     - name: Install tools / libraries 
-      run: sudo apt-get update && sudo apt-get -y install autoconf automake libtool make tar libapr1-dev libssl-dev cmake perl ninja-build
+      run: sudo apt-get update && sudo apt-get -y install autoconf automake libtool libtool-bin make tar libapr1-dev libssl-dev cmake perl ninja-build
 
     - name: Build project
-      run: ./mvnw clean package -DskipTests=true
+      run: ./mvnw clean package -pl openssl-dynamic -DskipTests=true
 
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v1
+      uses: github/codeql-action/analyze@v2

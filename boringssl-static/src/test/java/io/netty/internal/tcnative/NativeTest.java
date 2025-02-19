@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 The Netty Project
+ * Copyright 2024 The Netty Project
  *
  * The Netty Project licenses this file to you under the Apache License,
  * version 2.0 (the "License"); you may not use this file except in compliance
@@ -16,29 +16,25 @@
 package io.netty.internal.tcnative;
 
 
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.io.File;
 
-/**
- * All unit-tests <strong>MUST</strong> extend this base class, otherwise the native library may not be correctly
- * loaded.
- */
-public abstract class AbstractNativeTest {
+public class NativeTest {
 
-    @BeforeAll
-    public static void loadNativeLib() throws Exception {
-        String testClassesRoot =  AbstractNativeTest.class.getProtectionDomain().getCodeSource().getLocation().getFile();
+    @Test
+    public void loadNativeLib() throws Exception {
+        String testClassesRoot =  NativeTest.class.getProtectionDomain().getCodeSource().getLocation().getFile();
+        File f = new File(testClassesRoot + File.separator + "META-INF" + File.separator + "native");
         File[] directories = new File(testClassesRoot + File.separator + "META-INF" + File.separator + "native")
                 .listFiles();
         if (directories == null || directories.length != 1) {
-            throw new IllegalStateException("Could not find platform specific native directory");
+            throw new IllegalStateException("Could not find platform specific native directory: " + f);
         }
         String libName = System.mapLibraryName("netty_tcnative")
                 // Fix the filename (this is needed for macOS).
                 .replace(".dylib", ".jnilib");
         String libPath = directories[0].getAbsoluteFile() + File.separator + libName;
         System.load(libPath);
-        Library.initialize();
     }
 }

@@ -37,26 +37,27 @@
 #include "ssl_private.h"
 #include <stdint.h>
 #include "sslcontext.h"
+#include "cert_compress.h"
 
 #define SSLCONTEXT_CLASSNAME "io/netty/internal/tcnative/SSLContext"
 
-static jclass    sslTask_class;
+static jweak    sslTask_class_weak;
 static jfieldID  sslTask_returnValue;
 static jfieldID  sslTask_complete;
 
-static jclass    certificateCallbackTask_class;
+static jweak    certificateCallbackTask_class_weak;
 static jmethodID certificateCallbackTask_init;
 
-static jclass    certificateVerifierTask_class;
+static jweak    certificateVerifierTask_class_weak;
 static jmethodID certificateVerifierTask_init;
 
-static jclass    sslPrivateKeyMethodTask_class;
+static jweak    sslPrivateKeyMethodTask_class_weak;
 static jfieldID  sslPrivateKeyMethodTask_resultBytes;
 
-static jclass    sslPrivateKeyMethodSignTask_class;
+static jweak    sslPrivateKeyMethodSignTask_class_weak;
 static jmethodID sslPrivateKeyMethodSignTask_init;
 
-static jclass    sslPrivateKeyMethodDecryptTask_class;
+static jweak    sslPrivateKeyMethodDecryptTask_class_weak;
 static jmethodID sslPrivateKeyMethodDecryptTask_init;
 
 static const char* staticPackagePrefix = NULL;
@@ -81,6 +82,31 @@ static apr_status_t ssl_context_cleanup(void *data)
             }
             c->ssl_private_key_method = NULL;
         }
+        if (c->ssl_cert_compression_zlib_algorithm != NULL) {
+            if (e != NULL) {
+                (*e)->DeleteGlobalRef(e, c->ssl_cert_compression_zlib_algorithm);
+            }
+            c->ssl_cert_compression_zlib_algorithm = NULL;
+        }
+        if (c->ssl_cert_compression_brotli_algorithm != NULL) {
+            if (e != NULL) {
+                (*e)->DeleteGlobalRef(e, c->ssl_cert_compression_brotli_algorithm);
+            }
+            c->ssl_cert_compression_brotli_algorithm = NULL;
+        }
+        if (c->ssl_cert_compression_zstd_algorithm != NULL) {
+            if (e != NULL) {
+                (*e)->DeleteGlobalRef(e, c->ssl_cert_compression_zstd_algorithm);
+            }
+            c->ssl_cert_compression_zstd_algorithm = NULL;
+        }
+        if (c->keylog_callback != NULL) {
+            if (e != NULL) {
+                (*e)->DeleteGlobalRef(e, c->keylog_callback);
+            }
+            c->keylog_callback = NULL;
+        }
+        c->keylog_callback_method = NULL;
 #endif // OPENSSL_IS_BORINGSSL
 
         if (c->ssl_session_cache != NULL) {
@@ -167,6 +193,11 @@ TCN_IMPLEMENT_CALL(jlong, SSLContext, make)(TCN_STDARGS, jint protocol, jint mod
     // See https://github.com/google/boringssl/blob/chromium-stable/PORTING.md#crypto_buffer
     ctx = SSL_CTX_new(TLS_with_buffers_method());
 
+    // We need to set the minimum TLS version to TLS1 to be able to enable it explicitly later. By default
+    // TLS1_2_VERSION is the minimum with BoringSSL these days:
+    // See https://github.com/google/boringssl/commit/e95b0cad901abd49755d2a2a2f1f6c3e87d12b94
+    SSL_CTX_set_min_proto_version(ctx, TLS1_VERSION);
+
     // Needed in BoringSSL to be able to use TLSv1.3
     //
     // See http://hg.nginx.org/nginx/rev/7ad0f4ace359
@@ -187,111 +218,122 @@ TCN_IMPLEMENT_CALL(jlong, SSLContext, make)(TCN_STDARGS, jint protocol, jint mod
     switch (protocol) {
     case SSL_PROTOCOL_TLS:
     case SSL_PROTOCOL_ALL:
-        if (mode == SSL_MODE_CLIENT)
+        if (mode == SSL_MODE_CLIENT) {
             ctx = SSL_CTX_new(SSLv23_client_method());
-        else if (mode == SSL_MODE_SERVER)
+        } else if (mode == SSL_MODE_SERVER) {
             ctx = SSL_CTX_new(SSLv23_server_method());
-        else
+        } else {
             ctx = SSL_CTX_new(SSLv23_method());
+        }
         break;
     case SSL_PROTOCOL_TLSV1_2:
 #ifndef OPENSSL_NO_TLS1
-        if (mode == SSL_MODE_CLIENT)
+        if (mode == SSL_MODE_CLIENT) {
             ctx = SSL_CTX_new(TLSv1_2_client_method());
-        else if (mode == SSL_MODE_SERVER)
+        } else if (mode == SSL_MODE_SERVER) {
             ctx = SSL_CTX_new(TLSv1_2_server_method());
-        else
+        } else {
             ctx = SSL_CTX_new(TLSv1_2_method());
+        }
 #endif
         break;
     case SSL_PROTOCOL_TLSV1_1:
 #ifndef OPENSSL_NO_TLS1
-        if (mode == SSL_MODE_CLIENT)
+        if (mode == SSL_MODE_CLIENT) {
             ctx = SSL_CTX_new(TLSv1_1_client_method());
-        else if (mode == SSL_MODE_SERVER)
+        } else if (mode == SSL_MODE_SERVER) {
             ctx = SSL_CTX_new(TLSv1_1_server_method());
-        else
+        } else {
             ctx = SSL_CTX_new(TLSv1_1_method());
+        }
 #endif
         break;
     case SSL_PROTOCOL_TLSV1:
 #ifndef OPENSSL_NO_TLS1
-        if (mode == SSL_MODE_CLIENT)
+        if (mode == SSL_MODE_CLIENT) {
             ctx = SSL_CTX_new(TLSv1_client_method());
-        else if (mode == SSL_MODE_SERVER)
+        } else if (mode == SSL_MODE_SERVER) {
             ctx = SSL_CTX_new(TLSv1_server_method());
-        else
+        } else {
             ctx = SSL_CTX_new(TLSv1_method());
+        }
 #endif
         break;
     case SSL_PROTOCOL_SSLV3:
 #ifndef OPENSSL_NO_SSL3
-        if (mode == SSL_MODE_CLIENT)
+        if (mode == SSL_MODE_CLIENT) {
             ctx = SSL_CTX_new(SSLv3_client_method());
-        else if (mode == SSL_MODE_SERVER)
+        } else if (mode == SSL_MODE_SERVER) {
             ctx = SSL_CTX_new(SSLv3_server_method());
-        else
+        } else {
             ctx = SSL_CTX_new(SSLv3_method());
+        }
 #endif
         break;
     case SSL_PROTOCOL_SSLV2:
 #ifndef OPENSSL_NO_SSL2
-        if (mode == SSL_MODE_CLIENT)
+        if (mode == SSL_MODE_CLIENT) {
             ctx = SSL_CTX_new(SSLv2_client_method());
-        else if (mode == SSL_MODE_SERVER)
+        } else if (mode == SSL_MODE_SERVER) {
             ctx = SSL_CTX_new(SSLv2_server_method());
-        else
+        } else {
             ctx = SSL_CTX_new(SSLv2_method());
+        }
 #endif
         break;
     default:
         // Try to give the user the highest supported protocol.
 #ifndef OPENSSL_NO_TLS1
         if (protocol & SSL_PROTOCOL_TLSV1_2) {
-            if (mode == SSL_MODE_CLIENT)
+            if (mode == SSL_MODE_CLIENT) {
                 ctx = SSL_CTX_new(TLSv1_2_client_method());
-            else if (mode == SSL_MODE_SERVER)
+            } else if (mode == SSL_MODE_SERVER) {
                 ctx = SSL_CTX_new(TLSv1_2_server_method());
-            else
+            } else {
                 ctx = SSL_CTX_new(TLSv1_2_method());
+            }
             break;
         } else if (protocol & SSL_PROTOCOL_TLSV1_1) {
-            if (mode == SSL_MODE_CLIENT)
+            if (mode == SSL_MODE_CLIENT) {
                 ctx = SSL_CTX_new(TLSv1_1_client_method());
-            else if (mode == SSL_MODE_SERVER)
+            } else if (mode == SSL_MODE_SERVER) {
                 ctx = SSL_CTX_new(TLSv1_1_server_method());
-            else
+            } else {
                 ctx = SSL_CTX_new(TLSv1_1_method());
+            }
             break;
         } else if (protocol & SSL_PROTOCOL_TLSV1) {
-            if (mode == SSL_MODE_CLIENT)
+            if (mode == SSL_MODE_CLIENT) {
                 ctx = SSL_CTX_new(TLSv1_client_method());
-            else if (mode == SSL_MODE_SERVER)
+            } else if (mode == SSL_MODE_SERVER) {
                 ctx = SSL_CTX_new(TLSv1_server_method());
-            else
+            } else {
                 ctx = SSL_CTX_new(TLSv1_method());
+            }
             break;
         }
 #endif
 #ifndef OPENSSL_NO_SSL3
         if (protocol & SSL_PROTOCOL_SSLV3) {
-            if (mode == SSL_MODE_CLIENT)
+            if (mode == SSL_MODE_CLIENT) {
                 ctx = SSL_CTX_new(SSLv3_client_method());
-            else if (mode == SSL_MODE_SERVER)
+            } else if (mode == SSL_MODE_SERVER) {
                 ctx = SSL_CTX_new(SSLv3_server_method());
-            else
+            } else {
                 ctx = SSL_CTX_new(SSLv3_method());
+            }
             break;
         }
 #endif
 #ifndef OPENSSL_NO_SSL2
         if (protocol & SSL_PROTOCOL_SSLV2) {
-            if (mode == SSL_MODE_CLIENT)
+            if (mode == SSL_MODE_CLIENT) {
                 ctx = SSL_CTX_new(SSLv2_client_method());
-            else if (mode == SSL_MODE_SERVER)
+            } else if (mode == SSL_MODE_SERVER) {
                 ctx = SSL_CTX_new(SSLv2_server_method());
-            else
+            } else {
                 ctx = SSL_CTX_new(SSLv2_method());
+            }
             break;
         }
 #endif
@@ -319,19 +361,24 @@ TCN_IMPLEMENT_CALL(jlong, SSLContext, make)(TCN_STDARGS, jint protocol, jint mod
     c->ctx      = ctx;
     c->pool     = p;
 
-    if (!(protocol & SSL_PROTOCOL_SSLV2))
+    if (!(protocol & SSL_PROTOCOL_SSLV2)) {
         SSL_CTX_set_options(c->ctx, SSL_OP_NO_SSLv2);
-    if (!(protocol & SSL_PROTOCOL_SSLV3))
+    }
+    if (!(protocol & SSL_PROTOCOL_SSLV3)) {
         SSL_CTX_set_options(c->ctx, SSL_OP_NO_SSLv3);
-    if (!(protocol & SSL_PROTOCOL_TLSV1))
+    }
+    if (!(protocol & SSL_PROTOCOL_TLSV1)) {
         SSL_CTX_set_options(c->ctx, SSL_OP_NO_TLSv1);
+    }
 #ifdef SSL_OP_NO_TLSv1_1
-    if (!(protocol & SSL_PROTOCOL_TLSV1_1))
+    if (!(protocol & SSL_PROTOCOL_TLSV1_1)) {
         SSL_CTX_set_options(c->ctx, SSL_OP_NO_TLSv1_1);
+    }
 #endif
 #ifdef SSL_OP_NO_TLSv1_2
-    if (!(protocol & SSL_PROTOCOL_TLSV1_2))
+    if (!(protocol & SSL_PROTOCOL_TLSV1_2)) {
         SSL_CTX_set_options(c->ctx, SSL_OP_NO_TLSv1_2);
+    }
 #endif
     /*
      * Configure additional context ingredients
@@ -381,7 +428,11 @@ TCN_IMPLEMENT_CALL(jlong, SSLContext, make)(TCN_STDARGS, jint protocol, jint mod
         EC_KEY_free(ecdh);
 #endif
 
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
         SSL_CTX_set_tmp_dh_callback(c->ctx,  tcn_SSL_callback_tmp_DH);
+#else
+        SSL_CTX_set_dh_auto(c->ctx, 1);
+#endif
     }
 
     // Default depth is 100 and disabled according to https://www.openssl.org/docs/man1.0.2/ssl/SSL_set_verify.html.
@@ -538,10 +589,12 @@ TCN_IMPLEMENT_CALL(jboolean, SSLContext, setCertificateChainFile)(TCN_STDARGS, j
 
     TCN_ALLOC_CSTRING(file);
 
-    if (!J2S(file))
+    if (!J2S(file)) {
         return JNI_FALSE;
-    if (tcn_SSL_CTX_use_certificate_chain(c->ctx, J2S(file), skipfirst) > 0)
+    }
+    if (tcn_SSL_CTX_use_certificate_chain(c->ctx, J2S(file), skipfirst) > 0) {
         rv = JNI_TRUE;
+    }
     TCN_FREE_CSTRING(file);
     return rv;
 #endif // OPENSSL_IS_BORINGSSL
@@ -560,8 +613,9 @@ TCN_IMPLEMENT_CALL(jboolean, SSLContext, setCertificateChainBio)(TCN_STDARGS, jl
 
     TCN_CHECK_NULL(c, ctx, JNI_FALSE);
 
-    if (b == NULL)
+    if (b == NULL) {
         return JNI_FALSE;
+    }
     if (tcn_SSL_CTX_use_certificate_chain_bio(c->ctx, b, skipfirst) > 0)  {
         return JNI_TRUE;
     }
@@ -609,6 +663,7 @@ TCN_IMPLEMENT_CALL(jboolean, SSLContext, setNumTickets)(TCN_STDARGS, jlong ctx, 
 
 TCN_IMPLEMENT_CALL(void, SSLContext, setTmpDHLength)(TCN_STDARGS, jlong ctx, jint length)
 {
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
     tcn_ssl_ctxt_t *c = J2P(ctx, tcn_ssl_ctxt_t *);
 
     TCN_CHECK_NULL(c, ctx, /* void */);
@@ -630,6 +685,7 @@ TCN_IMPLEMENT_CALL(void, SSLContext, setTmpDHLength)(TCN_STDARGS, jlong ctx, jin
             tcn_Throw(e, "Unsupported length %s", length);
             return;
     }
+#endif // OPENSSL_VERSION_NUMBER < 0x30000000L
 }
 
 #ifndef OPENSSL_IS_BORINGSSL
@@ -686,8 +742,9 @@ static int ssl_load_pkcs12(tcn_ssl_ctxt_t *c, const char *file,
     PKCS12     *p12 = NULL;
     BIO        *in = NULL;
 
-    if ((in = BIO_new(BIO_s_file())) == 0)
+    if ((in = BIO_new(BIO_s_file())) == 0) {
         return 0;
+    }
     if (BIO_read_filename(in, file) <= 0) {
         BIO_free(in);
         return 0;
@@ -700,8 +757,7 @@ static int ssl_load_pkcs12(tcn_ssl_ctxt_t *c, const char *file,
     /* See if an empty password will do */
     if (PKCS12_verify_mac(p12, "", 0) || PKCS12_verify_mac(p12, 0, 0)) {
         pass = "";
-    }
-    else {
+    } else {
         len = tcn_SSL_password_callback(buff, PEM_BUFSIZE, 0, (void *) c->password);
         if (len < 0) {
             /* Passpharse callback error */
@@ -715,8 +771,9 @@ static int ssl_load_pkcs12(tcn_ssl_ctxt_t *c, const char *file,
     }
     rc = PKCS12_parse(p12, pass, pkey, cert, ca);
 cleanup:
-    if (p12 != 0)
+    if (p12 != 0) {
         PKCS12_free(p12);
+    }
     BIO_free(in);
     return rc;
 }
@@ -771,8 +828,9 @@ TCN_IMPLEMENT_CALL(jboolean, SSLContext, setCertificate)(TCN_STDARGS, jlong ctx,
     }
     key_file  = J2S(key);
     cert_file = J2S(cert);
-    if (!key_file)
+    if (!key_file) {
         key_file = cert_file;
+    }
     if (!key_file || !cert_file) {
         tcn_Throw(e, "No Certificate file specified or invalid file format");
         rv = JNI_FALSE;
@@ -786,8 +844,7 @@ TCN_IMPLEMENT_CALL(jboolean, SSLContext, setCertificate)(TCN_STDARGS, jlong ctx,
             rv = JNI_FALSE;
             goto cleanup;
         }
-    }
-    else {
+    } else {
         if ((pkey = load_pem_key(c, key_file)) == NULL) {
             ERR_error_string_n(ERR_get_error(), err, ERR_LEN);
             tcn_Throw(e, "Unable to load certificate key %s (%s)",
@@ -865,8 +922,9 @@ TCN_IMPLEMENT_CALL(jboolean, SSLContext, setCertificateBio)(TCN_STDARGS, jlong c
         }
     }
 
-    if (!key)
+    if (!key) {
         key = cert;
+    }
     if (!cert || !key) {
         tcn_Throw(e, "No Certificate file specified or invalid file format");
         rv = JNI_FALSE;
@@ -948,7 +1006,7 @@ TCN_IMPLEMENT_CALL(void, SSLContext, setAlpnProtos0)(TCN_STDARGS, jlong ctx, jby
         jint selectorFailureBehavior)
 {
     // Only supported with GCC
-    #if defined(__GNUC__) || defined(__GNUG__)
+    #if !defined(OPENSSL_IS_BORINGSSL) && (defined(__GNUC__) || defined(__GNUG__))
         if (!SSL_CTX_set_alpn_protos || !SSL_CTX_set_alpn_select_cb) {
             return;
         }
@@ -1231,7 +1289,16 @@ static int find_session_key(tcn_ssl_ctxt_t *c, unsigned char key_name[16], tcn_s
     return result;
 }
 
-static int ssl_tlsext_ticket_key_cb(SSL *s, unsigned char key_name[16], unsigned char *iv, EVP_CIPHER_CTX *ctx, HMAC_CTX *hctx, int enc) {
+static int ssl_tlsext_ticket_key_cb(SSL *s,
+                                    unsigned char key_name[16],
+                                    unsigned char *iv,
+                                    EVP_CIPHER_CTX *ctx,
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
+                                    HMAC_CTX *hmac_ctx,
+#else
+                                    EVP_MAC_CTX *mac_ctx,
+#endif
+                                    int enc) {
      tcn_ssl_ctxt_t *c = NULL;
      tcn_ssl_ticket_key_t key;
      int is_current_key;
@@ -1249,7 +1316,11 @@ static int ssl_tlsext_ticket_key_cb(SSL *s, unsigned char key_name[16], unsigned
              memcpy(key_name, key.key_name, 16);
 
              EVP_EncryptInit_ex(ctx, EVP_aes_128_cbc(), NULL, key.aes_key, iv);
-             HMAC_Init_ex(hctx, key.hmac_key, 16, EVP_sha256(), NULL);
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
+             HMAC_Init_ex(hmac_ctx, key.hmac_key, 16, EVP_sha256(), NULL);
+#else
+             EVP_MAC_CTX_set_params(mac_ctx, key.mac_params);
+#endif
              apr_atomic_inc32(&c->ticket_keys_new);
              return 1;
          }
@@ -1257,7 +1328,11 @@ static int ssl_tlsext_ticket_key_cb(SSL *s, unsigned char key_name[16], unsigned
          return 0;
      } else { /* retrieve session */
          if (find_session_key(c, key_name, &key, &is_current_key)) {
-             HMAC_Init_ex(hctx, key.hmac_key, 16, EVP_sha256(), NULL);
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
+             HMAC_Init_ex(hmac_ctx, key.hmac_key, 16, EVP_sha256(), NULL);
+#else
+             EVP_MAC_CTX_set_params(mac_ctx, key.mac_params);
+#endif
              EVP_DecryptInit_ex(ctx, EVP_aes_128_cbc(), NULL, key.aes_key, iv );
              if (!is_current_key) {
                  // The ticket matched a key in the list, and we want to upgrade it to the current
@@ -1288,20 +1363,28 @@ TCN_IMPLEMENT_CALL(void, SSLContext, setSessionTicketKeys0)(TCN_STDARGS, jlong c
     int cnt;
 
     cnt = (*e)->GetArrayLength(e, keys) / SSL_SESSION_TICKET_KEY_SIZE;
-    b = (*e)->GetByteArrayElements(e, keys, NULL);
-
     if ((ticket_keys = OPENSSL_malloc(sizeof(tcn_ssl_ticket_key_t) * cnt)) == NULL) {
         tcn_ThrowException(e, "OPENSSL_malloc() returned null");
         return;
     }
-    
+
+    if ((b = (*e)->GetByteArrayElements(e, keys, NULL)) == NULL) {
+      tcn_ThrowException(e, "GetByteArrayElements() returned null");
+      return;
+    }
+
     for (i = 0; i < cnt; ++i) {
         key = b + (SSL_SESSION_TICKET_KEY_SIZE * i);
         memcpy(ticket_keys[i].key_name, key, 16);
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
         memcpy(ticket_keys[i].hmac_key, key + 16, 16);
+#else
+        ticket_keys[i].mac_params[0] = OSSL_PARAM_construct_octet_string(OSSL_MAC_PARAM_KEY, key + 16, 16);
+        ticket_keys[i].mac_params[1] = OSSL_PARAM_construct_utf8_string(OSSL_MAC_PARAM_DIGEST, "sha256", 0);
+        ticket_keys[i].mac_params[2] = OSSL_PARAM_construct_end();
+#endif
         memcpy(ticket_keys[i].aes_key, key + 32, 16);
     }
-
     (*e)->ReleaseByteArrayElements(e, keys, b, 0);
 
     apr_thread_rwlock_wrlock(c->mutex);
@@ -1312,7 +1395,11 @@ TCN_IMPLEMENT_CALL(void, SSLContext, setSessionTicketKeys0)(TCN_STDARGS, jlong c
     c->ticket_keys = ticket_keys;
     apr_thread_rwlock_unlock(c->mutex);
 
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
     SSL_CTX_set_tlsext_ticket_key_cb(c->ctx, ssl_tlsext_ticket_key_cb);
+#else
+    SSL_CTX_set_tlsext_ticket_key_evp_cb(c->ctx, ssl_tlsext_ticket_key_cb);
+#endif
 }
 
 static const char* authentication_method(const SSL* ssl) {
@@ -1388,14 +1475,13 @@ static jbyteArray get_certs(JNIEnv *e, SSL* ssl, STACK_OF(X509)* chain) {
 
     tcn_ssl_state_t* state = tcn_SSL_get_app_state(ssl);
     TCN_ASSERT(state != NULL);
-    TCN_ASSERT(state->verify_config != NULL);
 
     // SSL_CTX_set_verify_depth() and SSL_set_verify_depth() set the limit up to which depth certificates in a chain are
     // used during the verification procedure. If the certificate chain is longer than allowed, the certificates above
     // the limit are ignored. Error messages are generated as if these certificates would not be present,
     // most likely a X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY will be issued.
     // https://www.openssl.org/docs/man1.0.2/ssl/SSL_set_verify.html
-    int len = TCN_MIN(state->verify_config->verify_depth, totalQueuedLength);
+    int len = TCN_MIN(state->verify_config.verify_depth, totalQueuedLength);
     unsigned i;
     int length;
 
@@ -1418,8 +1504,8 @@ static jbyteArray get_certs(JNIEnv *e, SSL* ssl, STACK_OF(X509)* chain) {
         length = i2d_X509(cert, &buf);
 #endif // OPENSSL_IS_BORINGSSL
 
-        if (length <= 0 || (bArray = (*e)->NewByteArray(e, length)) == NULL ) {
-            (*e)->DeleteLocalRef(e, array);
+        if (length <= 0 || (bArray = (*e)->NewByteArray(e, length)) == NULL) {
+            NETTY_JNI_UTIL_DELETE_LOCAL(e, array);
             array = NULL;
             goto complete;
         }
@@ -1436,7 +1522,7 @@ static jbyteArray get_certs(JNIEnv *e, SSL* ssl, STACK_OF(X509)* chain) {
 
         // Delete the local reference as we not know how long the chain is and local references are otherwise
         // only freed once jni method returns.
-        (*e)->DeleteLocalRef(e, bArray);
+        NETTY_JNI_UTIL_DELETE_LOCAL(e, bArray);
         bArray = NULL;
     }
 
@@ -1447,11 +1533,9 @@ complete:
     OPENSSL_free(buf);
 #endif // OPENSSL_IS_BORINGSSL
 
-    if (bArray != NULL) {
-        // Delete the local reference as we not know how long the chain is and local references are otherwise
-        // only freed once jni method returns.
-        (*e)->DeleteLocalRef(e, bArray);
-    }
+    // Delete the local reference as we not know how long the chain is and local references are otherwise
+    // only freed once jni method returns.
+    NETTY_JNI_UTIL_DELETE_LOCAL(e, bArray);
     return array;
 }
 
@@ -1486,7 +1570,7 @@ static int SSL_cert_verify(X509_STORE_CTX *ctx, void *arg) {
         goto complete;
     }
 
-    // Create the byte[][] array that holds all the certs
+    // Create the byte[][] array that holds all the certs
     if ((array = get_certs(e, ssl, sk)) == NULL) {
         goto complete;
     }
@@ -1526,17 +1610,13 @@ static int SSL_cert_verify(X509_STORE_CTX *ctx, void *arg) {
 #endif // X509_V_ERR_UNSPECIFIED
 
 
-    // TODO(scott): if verify_config->verify_depth == SSL_CVERIFY_OPTIONAL we have the option to let the handshake
+    // TODO(scott): if verify_config.verify_depth == SSL_CVERIFY_OPTIONAL we have the option to let the handshake
     // succeed for some of the "informational" error messages (e.g. X509_V_ERR_EMAIL_MISMATCH ?)
 
 complete:
     // We need to delete the local references so we not leak memory as this method is called via callback.
-    if (authMethodString != NULL) {
-        (*e)->DeleteLocalRef(e, authMethodString);
-    }
-    if (array != NULL) {
-        (*e)->DeleteLocalRef(e, array);
-    }
+    NETTY_JNI_UTIL_DELETE_LOCAL(e, authMethodString);
+    NETTY_JNI_UTIL_DELETE_LOCAL(e, array);
 
     X509_STORE_CTX_set_error(ctx, result);
 
@@ -1553,6 +1633,7 @@ enum ssl_verify_result_t tcn_SSL_cert_custom_verify(SSL* ssl, uint8_t *out_alert
     jint result = X509_V_ERR_UNSPECIFIED;
     jint len = 0;
     jbyteArray array = NULL;
+    jclass certificateVerifierTask_class = NULL;
     JNIEnv *e = NULL;
 
     if (state == NULL || state->ctx == NULL) {
@@ -1592,7 +1673,7 @@ enum ssl_verify_result_t tcn_SSL_cert_custom_verify(SSL* ssl, uint8_t *out_alert
         goto complete;
     }
 
-    // Create the byte[][] array that holds all the certs
+    // Create the byte[][] array that holds all the certs
     if ((array = get_certs(e, ssl, chain)) == NULL) {
         goto complete;
     }
@@ -1616,6 +1697,7 @@ enum ssl_verify_result_t tcn_SSL_cert_custom_verify(SSL* ssl, uint8_t *out_alert
     if (state->ctx->use_tasks != 0) {
         // Lets create the CertificateCallbackTask and store it on the SSL object. We then later retrieve it via
         // SSL.getTask(ssl) and run it.
+        NETTY_JNI_UTIL_NEW_LOCAL_FROM_WEAK(e, certificateVerifierTask_class, certificateVerifierTask_class_weak, complete);
         jobject task = (*e)->NewObject(e, certificateVerifierTask_class, certificateVerifierTask_init, P2J(ssl), array, authMethodString, state->ctx->verifier);
 
         if ((state->ssl_task = tcn_ssl_task_new(e, task)) == NULL) {
@@ -1640,18 +1722,15 @@ enum ssl_verify_result_t tcn_SSL_cert_custom_verify(SSL* ssl, uint8_t *out_alert
             result = X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY;
         }
 
-        // TODO(scott): if verify_config->verify_depth == SSL_CVERIFY_OPTIONAL we have the option to let the handshake
+        // TODO(scott): if verify_config.verify_depth == SSL_CVERIFY_OPTIONAL we have the option to let the handshake
         // succeed for some of the "informational" error messages (e.g. X509_V_ERR_EMAIL_MISMATCH ?)
     }
 complete:
 
     // We need to delete the local references so we not leak memory as this method is called via callback.
-    if (authMethodString != NULL) {
-        (*e)->DeleteLocalRef(e, authMethodString);
-    }
-    if (array != NULL) {
-        (*e)->DeleteLocalRef(e, array);
-    }
+    NETTY_JNI_UTIL_DELETE_LOCAL(e, authMethodString);
+    NETTY_JNI_UTIL_DELETE_LOCAL(e, array);
+    NETTY_JNI_UTIL_DELETE_LOCAL(e, certificateVerifierTask_class);
 
     if (ret != ssl_verify_retry) {
         if (result == X509_V_OK) {
@@ -1824,7 +1903,7 @@ static jobjectArray principalBytes(JNIEnv* e, const STACK_OF(X509_NAME)* names) 
 
         // Delete the local reference as we not know how long the chain is and local references are otherwise
         // only freed once jni method returns.
-        (*e)->DeleteLocalRef(e, bArray);
+        NETTY_JNI_UTIL_DELETE_LOCAL(e, bArray);
     }
 
     return array;
@@ -1926,6 +2005,7 @@ static int certificate_cb(SSL* ssl, void* arg) {
     jobjectArray issuers = NULL;
     JNIEnv *e = NULL;
     jbyteArray types = NULL;
+    jclass certificateCallbackTask_class = NULL;
 
     if (tcn_get_java_env(&e) != JNI_OK) {
         return 0;
@@ -1964,32 +2044,33 @@ static int certificate_cb(SSL* ssl, void* arg) {
 #endif // OPENSSL_IS_BORINGSSL
     }
 
+    int ret = 0;
     // Let's check if we should provide the certificate callback as task that can be run on another Thread.
     if (state->ctx->use_tasks != 0) {
         // Lets create the CertificateCallbackTask and store it on the SSL object. We then later retrieve it via
         // SSL.getTask(ssl) and run it.
+        NETTY_JNI_UTIL_NEW_LOCAL_FROM_WEAK(e, certificateCallbackTask_class, certificateCallbackTask_class_weak, complete);
         jobject task = (*e)->NewObject(e, certificateCallbackTask_class, certificateCallbackTask_init, P2J(ssl), types, issuers, state->ctx->certificate_callback);
 
-        if ((state->ssl_task = tcn_ssl_task_new(e, task)) == NULL) {
-            return 0;
+        if ((state->ssl_task = tcn_ssl_task_new(e, task)) != NULL) {
+            // Signal back that we want to suspend the handshake.
+            ret = -1;
         }
-
-        // Signal back that we want to suspend the handshake.
-        return -1;
     } else {
         // Execute the java callback
         (*e)->CallVoidMethod(e, state->ctx->certificate_callback, state->ctx->certificate_callback_method,
                  P2J(ssl), types, issuers);
 
         // Check if java threw an exception and if so signal back that we should not continue with the handshake.
-        if ((*e)->ExceptionCheck(e) == JNI_TRUE) {
-            return 0;
+        if ((*e)->ExceptionCheck(e) != JNI_TRUE) {
+            // Everything good...
+            ret = 1;
         }
-
-        // Everything good...
-        return 1;
     }
 
+complete:
+    NETTY_JNI_UTIL_DELETE_LOCAL(e, certificateCallbackTask_class);
+    return ret;
 }
 #endif // LIBRESSL_VERSION_NUMBER
 
@@ -2005,12 +2086,12 @@ TCN_IMPLEMENT_CALL(void, SSLContext, setCertificateCallback)(TCN_STDARGS, jlong 
 
 // Use weak linking with GCC as this will alow us to run the same packaged version with multiple
 // version of openssl.
-#if defined(__GNUC__) || defined(__GNUG__)
+#if !defined(OPENSSL_IS_BORINGSSL) && (defined(__GNUC__) || defined(__GNUG__))
     if (!SSL_CTX_set_cert_cb) {
         tcn_ThrowException(e, "Requires OpenSSL 1.0.2+");
         return;
     }
-#endif // defined(__GNUC__) || defined(__GNUG__)
+#endif
 
 // We can only support it when either use openssl version >= 1.0.2 or GCC as this way we can use weak linking
 #if OPENSSL_VERSION_NUMBER >= 0x10002000L || defined(__GNUC__) || defined(__GNUG__)
@@ -2064,6 +2145,7 @@ static enum ssl_private_key_result_t tcn_private_key_sign_java(SSL *ssl, uint8_t
     jbyteArray resultBytes = NULL;
     jbyteArray inputArray = NULL;
     jbyte* b = NULL;
+    jclass sslPrivateKeyMethodSignTask_class = NULL;
     int arrayLen = 0;
     JNIEnv *e = NULL;
 
@@ -2083,6 +2165,7 @@ static enum ssl_private_key_result_t tcn_private_key_sign_java(SSL *ssl, uint8_t
     if (state->ctx->use_tasks) {
         // Lets create the SSLPrivateKeyMethodSignTask and store it on the SSL object. We then later retrieve it via
         // SSL.getTask(ssl) and run it.
+        NETTY_JNI_UTIL_NEW_LOCAL_FROM_WEAK(e, sslPrivateKeyMethodSignTask_class, sslPrivateKeyMethodSignTask_class_weak, complete);
         jobject task = (*e)->NewObject(e, sslPrivateKeyMethodSignTask_class, sslPrivateKeyMethodSignTask_init, P2J(ssl),
                 signature_algorithm, inputArray, state->ctx->ssl_private_key_method);
         if ((state->ssl_task = tcn_ssl_task_new(e, task)) == NULL) {
@@ -2099,7 +2182,11 @@ static enum ssl_private_key_result_t tcn_private_key_sign_java(SSL *ssl, uint8_t
             } else {
                 arrayLen = (*e)->GetArrayLength(e, resultBytes);
                 if (max_out >= arrayLen) {
-                    b = (*e)->GetByteArrayElements(e, resultBytes, NULL);
+                    if ((b = (*e)->GetByteArrayElements(e, resultBytes, NULL)) == NULL) {
+                        ret = ssl_private_key_failure;
+                        goto complete;
+                    }
+
                     memcpy(out, b, arrayLen);
                     (*e)->ReleaseByteArrayElements(e, resultBytes, b, JNI_ABORT);
                     *out_len = arrayLen;
@@ -2114,9 +2201,9 @@ static enum ssl_private_key_result_t tcn_private_key_sign_java(SSL *ssl, uint8_t
     }
 complete:
     // Free up any allocated memory and return.
-    if (inputArray != NULL) {
-        (*e)->DeleteLocalRef(e, inputArray);
-    }
+    NETTY_JNI_UTIL_DELETE_LOCAL(e, inputArray);
+    NETTY_JNI_UTIL_DELETE_LOCAL(e, sslPrivateKeyMethodSignTask_class);
+
     return ret;
 }
 
@@ -2127,6 +2214,7 @@ static enum ssl_private_key_result_t tcn_private_key_decrypt_java(SSL *ssl, uint
     jbyteArray inArray = NULL;
     jbyte* b = NULL;
     int arrayLen = 0;
+    jclass sslPrivateKeyMethodDecryptTask_class = NULL;
     JNIEnv *e = NULL;
 
     if (state == NULL || state->ctx->ssl_private_key_method == NULL) {
@@ -2145,6 +2233,7 @@ static enum ssl_private_key_result_t tcn_private_key_decrypt_java(SSL *ssl, uint
     if (state->ctx->use_tasks) {
         // Lets create the SSLPrivateKeyMethodDecryptTask and store it on the SSL object. We then later retrieve it via
         // SSL.getTask(ssl) and run it.
+        NETTY_JNI_UTIL_NEW_LOCAL_FROM_WEAK(e, sslPrivateKeyMethodDecryptTask_class, sslPrivateKeyMethodDecryptTask_class_weak, complete);
         jobject task = (*e)->NewObject(e, sslPrivateKeyMethodDecryptTask_class, sslPrivateKeyMethodDecryptTask_init,
                 P2J(ssl), inArray, state->ctx->ssl_private_key_method);
 
@@ -2162,7 +2251,11 @@ static enum ssl_private_key_result_t tcn_private_key_decrypt_java(SSL *ssl, uint
             } else {
                 arrayLen = (*e)->GetArrayLength(e, resultBytes);
                 if (max_out >= arrayLen) {
-                    b = (*e)->GetByteArrayElements(e, resultBytes, NULL);
+                    if ((b = (*e)->GetByteArrayElements(e, resultBytes, NULL)) == NULL) {
+                        ret = ssl_private_key_failure;
+                        goto complete;
+                    }
+
                     memcpy(out, b, arrayLen);
                     (*e)->ReleaseByteArrayElements(e, resultBytes, b, JNI_ABORT);
                     *out_len = arrayLen;
@@ -2177,9 +2270,8 @@ static enum ssl_private_key_result_t tcn_private_key_decrypt_java(SSL *ssl, uint
 
 complete:
     // Delete the local reference as this is executed by a callback.
-    if (inArray != NULL) {
-        (*e)->DeleteLocalRef(e, inArray);
-    }
+    NETTY_JNI_UTIL_DELETE_LOCAL(e, inArray);
+    NETTY_JNI_UTIL_DELETE_LOCAL(e, sslPrivateKeyMethodDecryptTask_class);
     return ret;
 }
 
@@ -2225,7 +2317,9 @@ static enum ssl_private_key_result_t tcn_private_key_complete_java(SSL *ssl, uin
              // belong to us.
             return ssl_private_key_failure;
         }
-        b = (*e)->GetByteArrayElements(e, resultBytes, NULL);
+        if ((b = (*e)->GetByteArrayElements(e, resultBytes, NULL)) == NULL) {
+            return ssl_private_key_failure;
+        }
         memcpy(out, b, arrayLen);
         (*e)->ReleaseByteArrayElements(e, resultBytes, b, JNI_ABORT);
         *out_len = arrayLen;
@@ -2443,14 +2537,13 @@ static int ssl_servername_cb(SSL *ssl, int *ad, void *arg)
         }
         result = (*e)->CallBooleanMethod(e, c->sni_hostname_matcher, c->sni_hostname_matcher_method, P2J(ssl), servername_str);
 
+        // We need to delete the local references so we not leak memory as this method is called via callback.
+        NETTY_JNI_UTIL_DELETE_LOCAL(e, servername_str);
+
         // Check if java threw an exception.
         if ((*e)->ExceptionCheck(e)) {
-            // We need to delete the local references so we not leak memory as this method is called via callback.
-            (*e)->DeleteLocalRef(e, servername_str);
             return SSL_TLSEXT_ERR_ALERT_FATAL;
         }
-        // We need to delete the local references so we not leak memory as this method is called via callback.
-        (*e)->DeleteLocalRef(e, servername_str);
 
         return result == JNI_FALSE ? SSL_TLSEXT_ERR_ALERT_FATAL : SSL_TLSEXT_ERR_OK;
     }
@@ -2495,6 +2588,86 @@ TCN_IMPLEMENT_CALL(void, SSLContext, setSniHostnameMatcher)(TCN_STDARGS, jlong c
      if (oldMatcher != NULL) {
         (*e)->DeleteGlobalRef(e, oldMatcher);
     }
+}
+
+#ifdef OPENSSL_IS_BORINGSSL
+static void keylog_cb(const SSL* ssl, const char *line) {
+    if (line == NULL) {
+        return;
+    }
+
+    tcn_ssl_state_t *state = tcn_SSL_get_app_state(ssl);
+    if (state == NULL || state->ctx == NULL) {
+        // There's nothing we can do without tcn_ssl_state_t.
+        return;
+    }
+
+    JNIEnv *e = NULL;
+    if (tcn_get_java_env(&e) != JNI_OK) {
+        // There's nothing we can do with the JNIEnv*.
+        return;
+    }
+
+    jbyteArray outputLine = NULL;
+    int maxLen = 1048576; // 1 MiB.
+    int len = strnlen(line, maxLen);
+    if (len == maxLen) {
+        // This line is suspiciously large. Bail on it.
+        return;
+    }
+    if ((outputLine = (*e)->NewByteArray(e, len)) == NULL) {
+        // We failed to allocate a byte array.
+        return;
+    }
+    (*e)->SetByteArrayRegion(e, outputLine, 0, len, (const jbyte*) line);
+    
+    // Execute the java callback
+    (*e)->CallVoidMethod(e, state->ctx->keylog_callback, state->ctx->keylog_callback_method,
+                P2J(ssl), outputLine);
+}
+#endif // OPENSSL_IS_BORINGSSL
+
+TCN_IMPLEMENT_CALL(jboolean, SSLContext, setKeyLogCallback)(TCN_STDARGS, jlong ctx, jobject callback)
+{
+    tcn_ssl_ctxt_t *c = J2P(ctx, tcn_ssl_ctxt_t *);
+
+    TCN_CHECK_NULL(c, ctx, JNI_FALSE);
+
+#ifdef OPENSSL_IS_BORINGSSL
+    jobject oldCallback = c->keylog_callback;
+    if (callback == NULL) {
+        c->keylog_callback = NULL;
+        c->keylog_callback_method = NULL;
+
+        SSL_CTX_set_keylog_callback(c->ctx, NULL);
+    } else {
+        jclass callback_class = (*e)->GetObjectClass(e, callback);
+        jmethodID method = (*e)->GetMethodID(e, callback_class, "handle", "(J[B)V");
+        if (method == NULL) {
+            tcn_ThrowIllegalArgumentException(e, "Unable to retrieve handle method");
+            return JNI_FALSE;
+        }
+
+        jobject m = (*e)->NewGlobalRef(e, callback);
+        if (m == NULL) {
+            tcn_throwOutOfMemoryError(e, "Unable to allocate memory for global reference");
+            return JNI_FALSE;
+        }
+
+        c->keylog_callback = m;
+        c->keylog_callback_method = method;
+
+        SSL_CTX_set_keylog_callback(c->ctx, keylog_cb);
+    }
+
+     // Delete the reference to the previous specified callback if needed.
+     if (oldCallback != NULL) {
+        (*e)->DeleteGlobalRef(e, oldCallback);
+    }
+    return JNI_TRUE;
+#else
+    return JNI_FALSE;
+#endif // OPENSSL_IS_BORINGSSL
 }
 
 TCN_IMPLEMENT_CALL(jboolean, SSLContext, setSessionIdContext)(TCN_STDARGS, jlong ctx, jbyteArray sidCtx)
@@ -2631,6 +2804,125 @@ TCN_IMPLEMENT_CALL(void, SSLContext, setUseTasks)(TCN_STDARGS, jlong ctx, jboole
     c->use_tasks = useTasks == JNI_TRUE ? 1 : 0;
 }
 
+
+TCN_IMPLEMENT_CALL(jboolean, SSLContext, setCurvesList0)(TCN_STDARGS, jlong ctx, jstring curves) {
+    tcn_ssl_ctxt_t *c = J2P(ctx, tcn_ssl_ctxt_t *);
+
+    TCN_CHECK_NULL(c, ctx, JNI_FALSE);
+
+    if (curves == NULL) {
+        return JNI_FALSE;
+    }
+    const char *nativeString = (*e)->GetStringUTFChars(e, curves, 0);
+    int ret = tcn_SSL_CTX_set1_curves_list(c->ctx, nativeString);
+    (*e)->ReleaseStringUTFChars(e, curves, nativeString);
+
+    return ret == 1 ? JNI_TRUE : JNI_FALSE;
+}
+
+TCN_IMPLEMENT_CALL(void, SSLContext, setMaxCertList)(TCN_STDARGS, jlong ctx, jint size) {
+    tcn_ssl_ctxt_t *c = J2P(ctx, tcn_ssl_ctxt_t *);
+
+    TCN_CHECK_NULL(c, ctx, /* void */);
+
+    SSL_CTX_set_max_cert_list(c->ctx, size);
+}
+
+TCN_IMPLEMENT_CALL(jint, SSLContext, addCertificateCompressionAlgorithm0)(TCN_STDARGS, jlong ctx, jint direction, jint algorithmId, jobject algorithm) {
+    tcn_ssl_ctxt_t *c = J2P(ctx, tcn_ssl_ctxt_t *);
+    TCN_CHECK_NULL(c, ctx, 0);
+    if (algorithm == NULL) {
+        tcn_ThrowIllegalArgumentException(e, "Compression algorithm may not be null");
+        return 0;
+    }
+    if (!(direction & SSL_CERT_COMPRESSION_DIRECTION_COMPRESS) && !(direction & SSL_CERT_COMPRESSION_DIRECTION_DECOMPRESS)) {
+        tcn_ThrowIllegalArgumentException(e, "Invalid direction specified");
+        return 0;
+    }
+
+#ifdef OPENSSL_IS_BORINGSSL
+
+    jclass algorithmClass = (*e)->GetObjectClass(e, algorithm);
+    if (algorithmClass == NULL) {
+        tcn_Throw(e, "Unable to retrieve cert compression algorithm class");
+        return 0;
+    }
+
+    jmethodID compressMethod = (*e)->GetMethodID(e, algorithmClass, "compress", "(J[B)[B");
+    if (compressMethod == NULL) {
+        tcn_ThrowIllegalArgumentException(e, "Unable to retrieve compress method");
+        return 0;
+    }
+
+    jmethodID decompressMethod = (*e)->GetMethodID(e, algorithmClass, "decompress", "(JI[B)[B");
+    if (decompressMethod == NULL) {
+        tcn_ThrowIllegalArgumentException(e, "Unable to retrieve decompress method");
+        return 0;
+    }
+
+    jobject algoRef = (*e)->NewGlobalRef(e, algorithm);
+    if (algoRef == NULL) {
+        tcn_throwOutOfMemoryError(e, "Unable to allocate memory for global cert compression algorithm reference");
+        return 0;
+    }
+
+    int result = 0;
+    switch (algorithmId) {
+        case TLSEXT_cert_compression_zlib:
+            result = SSL_CTX_add_cert_compression_alg(c->ctx, algorithmId,
+                direction & SSL_CERT_COMPRESSION_DIRECTION_COMPRESS ? zlib_compress_java : NULL,
+                direction & SSL_CERT_COMPRESSION_DIRECTION_DECOMPRESS ? zlib_decompress_java : NULL);
+            if (result) {
+                if (c->ssl_cert_compression_zlib_algorithm != NULL) {
+                    (*e)->DeleteGlobalRef(e, c->ssl_cert_compression_zlib_algorithm);
+                }
+                c->ssl_cert_compression_zlib_algorithm = algoRef;
+                c->ssl_cert_compression_zlib_compress_method = compressMethod;
+                c->ssl_cert_compression_zlib_decompress_method = decompressMethod;
+            }
+            break;
+        case TLSEXT_cert_compression_brotli:
+            result = SSL_CTX_add_cert_compression_alg(c->ctx, algorithmId,
+                direction & SSL_CERT_COMPRESSION_DIRECTION_COMPRESS ? brotli_compress_java : NULL,
+                direction & SSL_CERT_COMPRESSION_DIRECTION_DECOMPRESS ? brotli_decompress_java : NULL);
+            if (result) {
+                if (c->ssl_cert_compression_brotli_algorithm != NULL) {
+                    (*e)->DeleteGlobalRef(e, c->ssl_cert_compression_brotli_algorithm);
+                }
+                c->ssl_cert_compression_brotli_algorithm = algoRef;
+                c->ssl_cert_compression_brotli_compress_method = compressMethod;
+                c->ssl_cert_compression_brotli_decompress_method = decompressMethod;
+            }
+            break;
+        case TLSEXT_cert_compression_zstd:
+            result = SSL_CTX_add_cert_compression_alg(c->ctx, algorithmId,
+                direction & SSL_CERT_COMPRESSION_DIRECTION_COMPRESS ? zstd_compress_java : NULL,
+                direction & SSL_CERT_COMPRESSION_DIRECTION_DECOMPRESS ? zstd_decompress_java : NULL);
+            if (result) {
+                if (c->ssl_cert_compression_zstd_algorithm != NULL) {
+                    (*e)->DeleteGlobalRef(e, c->ssl_cert_compression_zstd_algorithm);
+                }
+                c->ssl_cert_compression_zstd_algorithm = algoRef;
+                c->ssl_cert_compression_zstd_compress_method = compressMethod;
+                c->ssl_cert_compression_zstd_decompress_method = decompressMethod;
+            }
+            break;
+        default:
+             (*e)->DeleteGlobalRef(e, algoRef);
+            tcn_ThrowException(e, "Unrecognized certificate compression algorithm");
+            return 0;
+    }
+    if (!result) {
+        (*e)->DeleteGlobalRef(e, algoRef);
+        tcn_ThrowException(e, "Failed trying to add certificate compression algorithm");
+    }
+    return result;
+#else
+    tcn_Throw(e, "TLS Cert Compression only supported by BoringSSL");
+    return 0;
+#endif // OPENSSL_IS_BORINGSSL
+}
+
 // JNI Method Registration Table Begin
 static const JNINativeMethod fixed_method_table[] = {
   { TCN_METHOD_TABLE_ENTRY(make, (II)J, SSLContext) },
@@ -2677,6 +2969,7 @@ static const JNINativeMethod fixed_method_table[] = {
   // setCertRequestedCallback -> needs dynamic method table
   // setCertificateCallback -> needs dynamic method table
   // setSniHostnameMatcher -> needs dynamic method table
+  // setKeyLogCallback -> needs dynamic method table
   // setPrivateKeyMethod0 --> needs dynamic method table
   // setSSLSessionCache --> needs dynamic method table
 
@@ -2687,13 +2980,16 @@ static const JNINativeMethod fixed_method_table[] = {
   { TCN_METHOD_TABLE_ENTRY(disableOcsp, (J)V, SSLContext) },
   { TCN_METHOD_TABLE_ENTRY(getSslCtx, (J)J, SSLContext) },
   { TCN_METHOD_TABLE_ENTRY(setUseTasks, (JZ)V, SSLContext) },
-  { TCN_METHOD_TABLE_ENTRY(setNumTickets, (JI)Z, SSLContext) }
+  { TCN_METHOD_TABLE_ENTRY(setNumTickets, (JI)Z, SSLContext) },
+  { TCN_METHOD_TABLE_ENTRY(setCurvesList0, (JLjava/lang/String;)Z, SSLContext) },
+  { TCN_METHOD_TABLE_ENTRY(setMaxCertList, (JI)V, SSLContext) }
+  // addCertificateCompressionAlgorithm0 --> needs dynamic method table
 };
 
 static const jint fixed_method_table_size = sizeof(fixed_method_table) / sizeof(fixed_method_table[0]);
 
 static jint dynamicMethodsTableSize() {
-    return fixed_method_table_size + 6;
+    return fixed_method_table_size + 8;
 }
 
 static JNINativeMethod* createDynamicMethodsTable(const char* packagePrefix) {
@@ -2733,20 +3029,34 @@ static JNINativeMethod* createDynamicMethodsTable(const char* packagePrefix) {
     netty_jni_util_free_dynamic_name(&dynamicTypeName);
     dynamicMethod->name = "setSniHostnameMatcher";
     dynamicMethod->fnPtr = (void *) TCN_FUNCTION_NAME(SSLContext, setSniHostnameMatcher);
-  
+
     dynamicMethod = &dynamicMethods[fixed_method_table_size + 4];
+    NETTY_JNI_UTIL_PREPEND(packagePrefix, "io/netty/internal/tcnative/KeyLogCallback;)Z", dynamicTypeName, error);
+    NETTY_JNI_UTIL_PREPEND("(JL", dynamicTypeName,  dynamicMethod->signature, error);
+    netty_jni_util_free_dynamic_name(&dynamicTypeName);
+    dynamicMethod->name = "setKeyLogCallback";
+    dynamicMethod->fnPtr = (void *) TCN_FUNCTION_NAME(SSLContext, setKeyLogCallback);
+  
+    dynamicMethod = &dynamicMethods[fixed_method_table_size + 5];
     NETTY_JNI_UTIL_PREPEND(packagePrefix, "io/netty/internal/tcnative/AsyncSSLPrivateKeyMethod;)V", dynamicTypeName, error);
     NETTY_JNI_UTIL_PREPEND("(JL", dynamicTypeName,  dynamicMethod->signature, error);
     netty_jni_util_free_dynamic_name(&dynamicTypeName);
     dynamicMethod->name = "setPrivateKeyMethod0";
     dynamicMethod->fnPtr = (void *) TCN_FUNCTION_NAME(SSLContext, setPrivateKeyMethod0);
 
-    dynamicMethod = &dynamicMethods[fixed_method_table_size + 5];
+    dynamicMethod = &dynamicMethods[fixed_method_table_size + 6];
     NETTY_JNI_UTIL_PREPEND(packagePrefix, "io/netty/internal/tcnative/SSLSessionCache;)V", dynamicTypeName, error); 
     NETTY_JNI_UTIL_PREPEND("(JL", dynamicTypeName,  dynamicMethod->signature, error);
     netty_jni_util_free_dynamic_name(&dynamicTypeName);
     dynamicMethod->name = "setSSLSessionCache";
     dynamicMethod->fnPtr = (void *) TCN_FUNCTION_NAME(SSLContext, setSSLSessionCache);
+
+    dynamicMethod = &dynamicMethods[fixed_method_table_size + 7];
+    NETTY_JNI_UTIL_PREPEND(packagePrefix, "io/netty/internal/tcnative/CertificateCompressionAlgo;)I", dynamicTypeName, error);
+    NETTY_JNI_UTIL_PREPEND("(JIIL", dynamicTypeName,  dynamicMethod->signature, error);
+    netty_jni_util_free_dynamic_name(&dynamicTypeName);
+    dynamicMethod->name = "addCertificateCompressionAlgorithm0";
+    dynamicMethod->fnPtr = (void *) TCN_FUNCTION_NAME(SSLContext, addCertificateCompressionAlgorithm0);
 
     return dynamicMethods;
 error:
@@ -2762,6 +3072,12 @@ error:
 jint netty_internal_tcnative_SSLContext_JNI_OnLoad(JNIEnv* env, const char* packagePrefix) {
     char* name = NULL;
     char* combinedName = NULL;
+    jclass sslTask_class = NULL;
+    jclass certificateCallbackTask_class = NULL;
+    jclass certificateVerifierTask_class = NULL;
+    jclass sslPrivateKeyMethodTask_class = NULL;
+    jclass sslPrivateKeyMethodSignTask_class = NULL;
+    jclass sslPrivateKeyMethodDecryptTask_class = NULL;
     JNINativeMethod* dynamicMethods = createDynamicMethodsTable(packagePrefix);
     if (dynamicMethods == NULL) {
         goto error;
@@ -2775,12 +3091,15 @@ jint netty_internal_tcnative_SSLContext_JNI_OnLoad(JNIEnv* env, const char* pack
     }
 
     NETTY_JNI_UTIL_PREPEND(packagePrefix, "io/netty/internal/tcnative/SSLTask", name, error);
-    NETTY_JNI_UTIL_LOAD_CLASS(env, sslTask_class, name, error);
+
+    NETTY_JNI_UTIL_LOAD_CLASS_WEAK(env, sslTask_class_weak, name, error);
+    NETTY_JNI_UTIL_NEW_LOCAL_FROM_WEAK(env, sslTask_class, sslTask_class_weak, error);
     NETTY_JNI_UTIL_GET_FIELD(env, sslTask_class, sslTask_returnValue, "returnValue", "I", error);
     NETTY_JNI_UTIL_GET_FIELD(env, sslTask_class, sslTask_complete, "complete", "Z", error);
 
     NETTY_JNI_UTIL_PREPEND(packagePrefix, "io/netty/internal/tcnative/CertificateCallbackTask", name, error);
-    NETTY_JNI_UTIL_LOAD_CLASS(env, certificateCallbackTask_class, name, error);
+    NETTY_JNI_UTIL_LOAD_CLASS_WEAK(env, certificateCallbackTask_class_weak, name, error);
+    NETTY_JNI_UTIL_NEW_LOCAL_FROM_WEAK(env, certificateCallbackTask_class, certificateCallbackTask_class_weak, error);
 
     NETTY_JNI_UTIL_PREPEND(packagePrefix, "io/netty/internal/tcnative/CertificateCallback;)V", name, error);
     NETTY_JNI_UTIL_PREPEND("(J[B[[BL", name, combinedName, error);
@@ -2788,19 +3107,22 @@ jint netty_internal_tcnative_SSLContext_JNI_OnLoad(JNIEnv* env, const char* pack
     NETTY_JNI_UTIL_GET_METHOD(env, certificateCallbackTask_class, certificateCallbackTask_init, "<init>", name, error);
 
     NETTY_JNI_UTIL_PREPEND(packagePrefix, "io/netty/internal/tcnative/CertificateVerifierTask", name, error);
-    NETTY_JNI_UTIL_LOAD_CLASS(env, certificateVerifierTask_class, name, error);
-  
+    NETTY_JNI_UTIL_LOAD_CLASS_WEAK(env, certificateVerifierTask_class_weak, name, error);
+    NETTY_JNI_UTIL_NEW_LOCAL_FROM_WEAK(env, certificateVerifierTask_class, certificateVerifierTask_class_weak, error);
+
     NETTY_JNI_UTIL_PREPEND(packagePrefix, "io/netty/internal/tcnative/CertificateVerifier;)V", name, error);
     NETTY_JNI_UTIL_PREPEND("(J[[BLjava/lang/String;L", name, combinedName, error);
     TCN_REASSIGN(name, combinedName);
     NETTY_JNI_UTIL_GET_METHOD(env, certificateVerifierTask_class, certificateVerifierTask_init, "<init>", name, error);
 
     NETTY_JNI_UTIL_PREPEND(packagePrefix, "io/netty/internal/tcnative/SSLPrivateKeyMethodTask", name, error);
-    NETTY_JNI_UTIL_LOAD_CLASS(env, sslPrivateKeyMethodTask_class, name, error);
+    NETTY_JNI_UTIL_LOAD_CLASS_WEAK(env, sslPrivateKeyMethodTask_class_weak, name, error);
+    NETTY_JNI_UTIL_NEW_LOCAL_FROM_WEAK(env, sslPrivateKeyMethodTask_class, sslPrivateKeyMethodTask_class_weak, error);
     NETTY_JNI_UTIL_GET_FIELD(env, sslPrivateKeyMethodTask_class, sslPrivateKeyMethodTask_resultBytes, "resultBytes", "[B", error);
 
     NETTY_JNI_UTIL_PREPEND(packagePrefix, "io/netty/internal/tcnative/SSLPrivateKeyMethodSignTask", name, error);
-    NETTY_JNI_UTIL_LOAD_CLASS(env, sslPrivateKeyMethodSignTask_class, name, error);
+    NETTY_JNI_UTIL_LOAD_CLASS_WEAK(env, sslPrivateKeyMethodSignTask_class_weak, name, error);
+    NETTY_JNI_UTIL_NEW_LOCAL_FROM_WEAK(env, sslPrivateKeyMethodSignTask_class, sslPrivateKeyMethodSignTask_class_weak, error);
 
     NETTY_JNI_UTIL_PREPEND(packagePrefix, "io/netty/internal/tcnative/AsyncSSLPrivateKeyMethod;)V", name, error);
     NETTY_JNI_UTIL_PREPEND("(JI[BL", name, combinedName, error);
@@ -2808,7 +3130,8 @@ jint netty_internal_tcnative_SSLContext_JNI_OnLoad(JNIEnv* env, const char* pack
     NETTY_JNI_UTIL_GET_METHOD(env, sslPrivateKeyMethodSignTask_class, sslPrivateKeyMethodSignTask_init, "<init>", name, error);
 
     NETTY_JNI_UTIL_PREPEND(packagePrefix, "io/netty/internal/tcnative/SSLPrivateKeyMethodDecryptTask", name, error);
-    NETTY_JNI_UTIL_LOAD_CLASS(env, sslPrivateKeyMethodDecryptTask_class, name, error);
+    NETTY_JNI_UTIL_LOAD_CLASS_WEAK(env, sslPrivateKeyMethodDecryptTask_class_weak, name, error);
+    NETTY_JNI_UTIL_NEW_LOCAL_FROM_WEAK(env, sslPrivateKeyMethodDecryptTask_class, sslPrivateKeyMethodDecryptTask_class_weak, error);
 
     NETTY_JNI_UTIL_PREPEND(packagePrefix, "io/netty/internal/tcnative/AsyncSSLPrivateKeyMethod;)V", name, error);
     NETTY_JNI_UTIL_PREPEND("(J[BL", name, combinedName, error);
@@ -2824,16 +3147,22 @@ error:
     free(combinedName);
     netty_jni_util_free_dynamic_methods_table(dynamicMethods, fixed_method_table_size, dynamicMethodsTableSize());
 
+    NETTY_JNI_UTIL_DELETE_LOCAL(env, sslTask_class);
+    NETTY_JNI_UTIL_DELETE_LOCAL(env, certificateCallbackTask_class);
+    NETTY_JNI_UTIL_DELETE_LOCAL(env, certificateVerifierTask_class);
+    NETTY_JNI_UTIL_DELETE_LOCAL(env, sslPrivateKeyMethodTask_class);
+    NETTY_JNI_UTIL_DELETE_LOCAL(env, sslPrivateKeyMethodSignTask_class);
+    NETTY_JNI_UTIL_DELETE_LOCAL(env, sslPrivateKeyMethodDecryptTask_class);
     return JNI_ERR;
 }
 
 void netty_internal_tcnative_SSLContext_JNI_OnUnLoad(JNIEnv* env, const char* packagePrefix) {
-    NETTY_JNI_UTIL_UNLOAD_CLASS(env, sslTask_class);
-    NETTY_JNI_UTIL_UNLOAD_CLASS(env, certificateCallbackTask_class);
-    NETTY_JNI_UTIL_UNLOAD_CLASS(env, certificateVerifierTask_class);
-    NETTY_JNI_UTIL_UNLOAD_CLASS(env, sslPrivateKeyMethodTask_class);
-    NETTY_JNI_UTIL_UNLOAD_CLASS(env, sslPrivateKeyMethodSignTask_class);
-    NETTY_JNI_UTIL_UNLOAD_CLASS(env, sslPrivateKeyMethodDecryptTask_class);
+    NETTY_JNI_UTIL_UNLOAD_CLASS_WEAK(env, sslTask_class_weak);
+    NETTY_JNI_UTIL_UNLOAD_CLASS_WEAK(env, certificateCallbackTask_class_weak);
+    NETTY_JNI_UTIL_UNLOAD_CLASS_WEAK(env, certificateVerifierTask_class_weak);
+    NETTY_JNI_UTIL_UNLOAD_CLASS_WEAK(env, sslPrivateKeyMethodTask_class_weak);
+    NETTY_JNI_UTIL_UNLOAD_CLASS_WEAK(env, sslPrivateKeyMethodSignTask_class_weak);
+    NETTY_JNI_UTIL_UNLOAD_CLASS_WEAK(env, sslPrivateKeyMethodDecryptTask_class_weak);
 
     free((void*) staticPackagePrefix);
     staticPackagePrefix = NULL;

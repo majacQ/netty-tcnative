@@ -57,15 +57,16 @@ static jclass    jString_class;
 static jmethodID jString_init;
 static jmethodID jString_getBytes;
 static jclass    byteArrayClass;
-static char* staticPackagePrefix = NULL;
+static char const* staticPackagePrefix = NULL;
 
 jstring tcn_new_stringn(JNIEnv *env, const char *str, size_t l)
 {
     jstring result = NULL;
     jbyteArray bytes = 0;
 
-    if (!str)
+    if (!str) {
         return NULL;
+    }
     if ((*env)->EnsureLocalCapacity(env, 2) < 0) {
         return NULL; /* out of memory error */
     }
@@ -73,7 +74,7 @@ jstring tcn_new_stringn(JNIEnv *env, const char *str, size_t l)
     if (bytes != NULL) {
         (*env)->SetByteArrayRegion(env, bytes, 0, l, (jbyte *)str);
         result = (*env)->NewObject(env, jString_class, jString_init, bytes);
-        (*env)->DeleteLocalRef(env, bytes);
+        NETTY_JNI_UTIL_DELETE_LOCAL(env, bytes);
         return result;
     } /* else fall through */
     return NULL;
@@ -81,10 +82,10 @@ jstring tcn_new_stringn(JNIEnv *env, const char *str, size_t l)
 
 jstring tcn_new_string(JNIEnv *env, const char *str)
 {
-    if (!str)
+    if (!str) {
         return NULL;
-    else
-        return (*env)->NewStringUTF(env, str);
+    }
+    return (*env)->NewStringUTF(env, str);
 }
 
 TCN_IMPLEMENT_CALL(jboolean, Library, initialize0)(TCN_STDARGS)
@@ -150,7 +151,7 @@ static const jint method_table_size = sizeof(method_table) / sizeof(method_table
 
 // IMPORTANT: If you add any NETTY_JNI_UTIL_LOAD_CLASS or NETTY_JNI_UTIL_FIND_CLASS calls you also need to update
 //            Library to reflect that.
-static jint netty_internal_tcnative_Library_JNI_OnLoad(JNIEnv* env, const char* packagePrefix) {
+static jint netty_internal_tcnative_Library_JNI_OnLoad(JNIEnv* env, char const* packagePrefix) {
     int errorOnLoadCalled = 0;
     int bufferOnLoadCalled = 0;
     int jniMethodsOnLoadCalled = 0;
@@ -217,9 +218,7 @@ static jint netty_internal_tcnative_Library_JNI_OnLoad(JNIEnv* env, const char* 
                    "getBytes", "()[B", error);
 
     NETTY_JNI_UTIL_LOAD_CLASS(env, byteArrayClass, "[B", error);
-    if (packagePrefix) {
-        staticPackagePrefix = strdup(packagePrefix);
-    }
+    staticPackagePrefix = packagePrefix;
     return NETTY_JNI_UTIL_JNI_VERSION;
 error:
     if (tcn_global_pool != NULL) {
@@ -268,7 +267,7 @@ static void netty_internal_tcnative_Library_JNI_OnUnload(JNIEnv* env) {
     netty_internal_tcnative_SSL_JNI_OnUnLoad(env, staticPackagePrefix);
     netty_internal_tcnative_SSLContext_JNI_OnUnLoad(env, staticPackagePrefix);
     netty_internal_tcnative_SSLSession_JNI_OnUnLoad(env, staticPackagePrefix);
-    free(staticPackagePrefix);
+    free((void *) staticPackagePrefix);
     staticPackagePrefix = NULL;
 }
 
