@@ -58,6 +58,12 @@ static UI_METHOD *ui_method = NULL;
 #endif // OPENSSL_NO_ENGINE
 
 
+#if defined(OPENSSL_FIPS) && (OPENSSL_VERSION_NUMBER < 0x30000000L)
+#define tcn_enable_fips(to)   FIPS_mode_set((to))
+#else
+#define tcn_enable_fips(to)   EVP_default_properties_enable_fips(NULL, (to))
+#endif
+
 #if OPENSSL_VERSION_NUMBER < 0x10100000L || (defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x2090000fL)
 
 /* Global reference to the pool used by the dynamic mutexes */
@@ -344,6 +350,9 @@ static long bio_java_bytebuffer_ctrl(BIO* bio, int cmd, long num, void* ptr) {
             return 1;
         case BIO_CTRL_FLUSH:
             return 1;
+        case BIO_C_SET_FD:
+            // Make this a no op.
+            return 1;
         default:
             return 0;
     }
@@ -391,6 +400,12 @@ static int ssl_ui_writer(UI *ui, UI_STRING *uis)
   }
 }
 #endif // OPENSSL_NO_ENGINE
+
+TCN_IMPLEMENT_CALL(void, SSL, bioSetFd)(TCN_STDARGS, jlong ssl, jint fd) {
+    SSL *ssl_ = J2P(ssl, SSL *);
+    TCN_CHECK_NULL(ssl_, ssl, /* void */);
+    // no op.
+}
 
 TCN_IMPLEMENT_CALL(jint, SSL, bioLengthByteBuffer)(TCN_STDARGS, jlong bioAddress) {
     BIO* bio = J2P(bioAddress, BIO*);
@@ -452,10 +467,12 @@ static BIO_METHOD* BIO_java_bytebuffer() {
 #endif
 }
 
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
 static int ssl_tmp_key_init_dh(int bits, int idx)
 {
     return (SSL_temp_keys[idx] = tcn_SSL_dh_get_tmp_param(bits)) ? 0 : 1;
 }
+#endif
 
 TCN_IMPLEMENT_CALL(jint, SSL, version)(TCN_STDARGS)
 {
@@ -472,8 +489,10 @@ TCN_IMPLEMENT_CALL(jstring, SSL, versionString)(TCN_STDARGS)
  */
 static apr_status_t ssl_init_cleanup(void *data)
 {
-    if (!ssl_initialized)
+    if (!ssl_initialized) {
         return APR_SUCCESS;
+    }
+
     ssl_initialized = 0;
 
     SSL_TMP_KEYS_FREE(DH);
@@ -500,9 +519,9 @@ static apr_status_t ssl_init_cleanup(void *data)
     free_bio_methods();
 #endif
 
-// Reset fips mode to the default.
-#ifdef OPENSSL_FIPS
-     FIPS_mode_set(0);
+#if defined(OPENSSL_FIPS) && (OPENSSL_VERSION_NUMBER < 0x30000000L)
+    // Reset fips mode to the default.
+    tcn_enable_fips(0);
 #endif
 
 #ifndef OPENSSL_NO_ENGINE
@@ -567,8 +586,7 @@ static void ssl_thread_lock(int mode, int type,
     if (type < ssl_lock_num_locks) {
         if (mode & CRYPTO_LOCK) {
             apr_thread_mutex_lock(ssl_lock_cs[type]);
-        }
-        else {
+        } else {
             apr_thread_mutex_unlock(ssl_lock_cs[type]);
         }
     }
@@ -774,21 +792,22 @@ TCN_IMPLEMENT_CALL(jint, SSL, initialize)(TCN_STDARGS, jstring engine)
         ENGINE_load_builtin_engines();
         if(strcmp(J2S(engine), "auto") == 0) {
             ENGINE_register_all_complete();
-        }
-        else {
+        } else {
 
             // ssl_init_cleanup will take care of free the engine (tcn_ssl_engine) if needed.
 
             if ((tcn_ssl_engine = ENGINE_by_id(J2S(engine))) == NULL
-                && (tcn_ssl_engine = ssl_try_load_engine(J2S(engine))) == NULL)
+                && (tcn_ssl_engine = ssl_try_load_engine(J2S(engine))) == NULL) {
                 err = APR_ENOTIMPL;
-            else {
+            } else {
 #ifdef ENGINE_CTRL_CHIL_SET_FORKCHECK
-                if (strcmp(J2S(engine), "chil") == 0)
+                if (strcmp(J2S(engine), "chil") == 0) {
                     ENGINE_ctrl(tcn_ssl_engine, ENGINE_CTRL_CHIL_SET_FORKCHECK, 1, 0, 0);
+                }
 #endif
-                if (!ENGINE_set_default(tcn_ssl_engine, ENGINE_METHOD_ALL))
+                if (!ENGINE_set_default(tcn_ssl_engine, ENGINE_METHOD_ALL)) {
                     err = APR_ENOTIMPL;
+                }
             }
 
             if (err == APR_SUCCESS) {
@@ -830,7 +849,9 @@ TCN_IMPLEMENT_CALL(jint, SSL, initialize)(TCN_STDARGS, jstring engine)
     init_bio_methods();
 #endif
 
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
     SSL_TMP_KEYS_INIT(r);
+#endif
     if (r) {
         // TODO: Should we really do this as the user may want to inspect the error stack ?
         ERR_clear_error();
@@ -899,25 +920,16 @@ static tcn_ssl_state_t* new_ssl_state(tcn_ssl_ctxt_t* ctx) {
     memset(state, 0, sizeof(tcn_ssl_state_t));
     state->ctx = ctx;
 
-     // Initially we will share the configuration from the SSLContext.
-    state->verify_config = &ctx->verify_config;
+     // Initially we will copy the configuration from the SSLContext.
+    memcpy(&state->verify_config, &ctx->verify_config, sizeof(tcn_ssl_verify_config_t));
     return state;
 }
 
-static void free_ssl_state(tcn_ssl_state_t* state) {
-    JNIEnv* e = NULL;
+static void free_ssl_state(JNIEnv* e, tcn_ssl_state_t* state) {
     if (state == NULL) {
         return;
     }
 
-    // Only free the verify_config if it is not shared with the SSLContext.
-    if (state->verify_config != NULL && state->verify_config != &state->ctx->verify_config) {
-        OPENSSL_free(state->verify_config);
-        state->verify_config = NULL;
-    }
-
-
-    tcn_get_java_env(&e);
     tcn_ssl_task_free(e, state->ssl_task);
     state->ssl_task = NULL;
 
@@ -946,7 +958,7 @@ TCN_IMPLEMENT_CALL(jlong /* SSL * */, SSL, newSSL)(TCN_STDARGS,
         tcn_ThrowException(e, "cannot create new ssl state struct");
         return 0;
     }
-    
+
     // Set the app_data2 before all the others because it may be used in SSL_free.
     tcn_SSL_set_app_state(ssl, state);
 
@@ -982,6 +994,7 @@ TCN_IMPLEMENT_CALL(jint /* status */, SSL, bioWrite)(TCN_STDARGS,
 
     TCN_CHECK_NULL(bio, bioAddress, 0);
     TCN_CHECK_NULL(wbuf, wbufAddress, 0);
+    TCN_CHECK_POSITIVE_OR_ZERO(wlen, wlen must be >= 0, 0);
 
     return BIO_write(bio, wbuf, wlen);
 }
@@ -996,7 +1009,7 @@ TCN_IMPLEMENT_CALL(void, SSL, bioSetByteBuffer)(TCN_STDARGS,
     struct TCN_bio_bytebuffer* bioUserData = NULL;
     TCN_CHECK_NULL(bio, bioAddress, /* void */);
     TCN_CHECK_NULL(buffer, bufferAddress, /* void */);
-
+    TCN_CHECK_POSITIVE_OR_ZERO(maxUsableBytes, maxUsableBytes must be >= 0, /* void */);
     bioUserData = (struct TCN_bio_bytebuffer*) BIO_get_data(bio);
     TCN_ASSERT(bioUserData != NULL);
 
@@ -1044,6 +1057,7 @@ TCN_IMPLEMENT_CALL(jint /* status */, SSL, writeToSSL)(TCN_STDARGS,
 
     TCN_CHECK_NULL(ssl_, ssl, 0);
     TCN_CHECK_NULL(w, wbuf, 0);
+    TCN_CHECK_POSITIVE_OR_ZERO(wlen, wlen must be >= 0, 0);
 
     return SSL_write(ssl_, w, wlen);
 }
@@ -1058,6 +1072,7 @@ TCN_IMPLEMENT_CALL(jint /* status */, SSL, readFromSSL)(TCN_STDARGS,
 
     TCN_CHECK_NULL(ssl_, ssl, 0);
     TCN_CHECK_NULL(r, rbuf, 0);
+    TCN_CHECK_POSITIVE_OR_ZERO(rlen, rlen must be >=, 0);
 
     return SSL_read(ssl_, r, rlen);
 }
@@ -1110,7 +1125,7 @@ TCN_IMPLEMENT_CALL(void, SSL, freeSSL)(TCN_STDARGS,
 
     TCN_CHECK_NULL(ssl_, ssl, /* void */);
 
-    free_ssl_state(tcn_SSL_get_app_state(ssl_));
+    free_ssl_state(e, tcn_SSL_get_app_state(ssl_));
 
     SSL_free(ssl_);
 }
@@ -1124,10 +1139,7 @@ TCN_IMPLEMENT_CALL(jlong, SSL, bioNewByteBuffer)(TCN_STDARGS,
 
     TCN_CHECK_NULL(ssl_, ssl, 0);
 
-    if (nonApplicationBufferSize <= 0) {
-        tcn_ThrowException(e, "nonApplicationBufferSize <= 0");
-        return 0;
-    }
+    TCN_CHECK_POSITIVE(nonApplicationBufferSize, nonApplicationBufferSize must be > 0, 0);
 
     bio = BIO_new(BIO_java_bytebuffer());
     if (bio == NULL) {
@@ -1237,7 +1249,7 @@ TCN_IMPLEMENT_CALL(jstring, SSL, getAlpnSelected)(TCN_STDARGS,
                                                          jlong ssl /* SSL * */) {
     // Use weak linking with GCC as this will alow us to run the same packaged version with multiple
     // version of openssl.
-    #if defined(__GNUC__) || defined(__GNUG__)
+    #if !defined(OPENSSL_IS_BORINGSSL) && (defined(__GNUC__) || defined(__GNUG__))
         if (!SSL_get0_alpn_selected) {
             return NULL;
         }
@@ -1314,7 +1326,7 @@ TCN_IMPLEMENT_CALL(jobjectArray, SSL, getPeerCertChain)(TCN_STDARGS,
         // Out of memory
         return NULL;
     }
-     
+
     for(i = 0; i < len; i++) {
 
 #ifdef OPENSSL_IS_BORINGSSL
@@ -1353,7 +1365,7 @@ TCN_IMPLEMENT_CALL(jobjectArray, SSL, getPeerCertChain)(TCN_STDARGS,
 
         // Delete the local reference as we not know how long the chain is and local references are otherwise
         // only freed once jni method returns.
-        (*e)->DeleteLocalRef(e, bArray);
+        NETTY_JNI_UTIL_DELETE_LOCAL(e, bArray);
     }
     return array;
 }
@@ -1509,24 +1521,13 @@ TCN_IMPLEMENT_CALL(void, SSL, setVerify)(TCN_STDARGS, jlong ssl, jint level, jin
     state = tcn_SSL_get_app_state(ssl_);
     TCN_ASSERT(state != NULL);
     TCN_ASSERT(state->ctx != NULL);
-    TCN_ASSERT(state->verify_config != NULL);
-
-    // If we are sharing the configuration from the SSLContext we now need to create a new configuration just for this SSL.
-    if (state->verify_config == &state->ctx->verify_config) {
-       if ((state->verify_config = (tcn_ssl_verify_config_t*) OPENSSL_malloc(sizeof(tcn_ssl_verify_config_t))) == NULL) {
-           tcn_ThrowException(e, "failed to allocate tcn_ssl_verify_config_t");
-           return;
-       }
-       // Copy the verify depth form the context in case depth is <0.
-       state->verify_config->verify_depth = state->ctx->verify_config.verify_depth;
-    }
 
 #ifdef OPENSSL_IS_BORINGSSL
-    SSL_set_custom_verify(ssl_, tcn_set_verify_config(state->verify_config, level, depth), tcn_SSL_cert_custom_verify);
+    SSL_set_custom_verify(ssl_, tcn_set_verify_config(&state->verify_config, level, depth), tcn_SSL_cert_custom_verify);
 #else
     // No need to specify a callback for SSL_set_verify because we override the default certificate verification via SSL_CTX_set_cert_verify_callback.
-    SSL_set_verify(ssl_, tcn_set_verify_config(state->verify_config, level, depth), NULL);
-    SSL_set_verify_depth(ssl_, state->verify_config->verify_depth);
+    SSL_set_verify(ssl_, tcn_set_verify_config(&state->verify_config, level, depth), NULL);
+    SSL_set_verify_depth(ssl_, state->verify_config.verify_depth);
 #endif // OPENSSL_IS_BORINGSSL
 }
 
@@ -1633,6 +1634,36 @@ TCN_IMPLEMENT_CALL(jobjectArray, SSL, getCiphers)(TCN_STDARGS, jlong ssl)
         (*e)->SetObjectArrayElement(e, array, i, c_name);
     }
     return array;
+}
+
+TCN_IMPLEMENT_CALL(jboolean, SSL, setCurvesList0)(TCN_STDARGS, jlong ssl, jstring curves) {
+    SSL *ssl_ = J2P(ssl, SSL *);
+
+    TCN_CHECK_NULL(ssl_, ssl, JNI_FALSE);
+
+    if (curves == NULL) {
+        return JNI_FALSE;
+    }
+    const char *nativeString = (*e)->GetStringUTFChars(e, curves, 0);
+    int ret = tcn_SSL_set1_curves_list(ssl_, nativeString);
+    (*e)->ReleaseStringUTFChars(e, curves, nativeString);
+
+    return ret == 1 ? JNI_TRUE : JNI_FALSE;
+}
+
+TCN_IMPLEMENT_CALL(jboolean, SSL, setCurves0)(TCN_STDARGS, jlong ssl, jintArray curves) {
+    SSL *ssl_ = J2P(ssl, SSL *);
+
+    TCN_CHECK_NULL(ssl_, ssl, JNI_FALSE);
+
+    if (curves == NULL) {
+        return JNI_FALSE;
+    }
+    int len = (*e)->GetArrayLength(e, curves);
+    jint *nativeCurves = (*e)->GetIntArrayElements(e, curves, NULL);
+    int ret = tcn_SSL_set1_curves(ssl_, (int *) nativeCurves, len);
+    (*e)->ReleaseIntArrayElements(e, curves, nativeCurves, JNI_ABORT);
+    return ret == 1 ? JNI_TRUE : JNI_FALSE;
 }
 
 TCN_IMPLEMENT_CALL(jboolean, SSL, setCipherSuites)(TCN_STDARGS, jlong ssl,
@@ -1848,7 +1879,6 @@ TCN_IMPLEMENT_CALL(jbyteArray, SSL, getSessionId)(TCN_STDARGS, jlong ssl)
         return NULL;
     }
 
-    
     if ((bArray = (*e)->NewByteArray(e, len)) == NULL) {
         return NULL;
     }
@@ -2133,7 +2163,6 @@ TCN_IMPLEMENT_CALL(jlong, SSL, parseX509Chain)(TCN_STDARGS, jlong x509ChainBio)
 
     char err[ERR_LEN];
     unsigned long error;
-    int n = 0;
 
     TCN_CHECK_NULL(cert_bio, x509ChainBio, 0);
 
@@ -2164,7 +2193,6 @@ TCN_IMPLEMENT_CALL(jlong, SSL, parseX509Chain)(TCN_STDARGS, jlong x509ChainBio)
 #ifndef OPENSSL_IS_BORINGSSL
         cert = NULL;
 #endif // OPENSSL_IS_BORINGSSL
-        n++;
     }
 
     // ensure that if we have an error its just for EOL.
@@ -2492,8 +2520,8 @@ TCN_IMPLEMENT_CALL(jbyteArray, SSL, getOcspResponse)(TCN_STDARGS, jlong ssl) {
 
 TCN_IMPLEMENT_CALL(void, SSL, fipsModeSet)(TCN_STDARGS, jint mode)
 {
-#ifdef OPENSSL_FIPS
-    if (FIPS_mode_set((int) mode) == 0) {
+#if defined(OPENSSL_FIPS) || (OPENSSL_VERSION_NUMBER >= 0x30000000L)
+    if (tcn_enable_fips((int) mode) == 0) {
         char err[ERR_LEN];
         ERR_error_string_n(ERR_get_error(), err, ERR_LEN);
         ERR_clear_error();
@@ -2624,6 +2652,17 @@ complete:
 #endif // defined(OPENSSL_IS_BORINGSSL) || defined(LIBRESSL_VERSION_NUMBER)
 }
 
+TCN_IMPLEMENT_CALL(void, SSL, setRenegotiateMode)(TCN_STDARGS, jlong ssl, jint mode) {
+    SSL *ssl_ = J2P(ssl, SSL *);
+
+    TCN_CHECK_NULL(ssl_, ssl, /* void */);
+#ifndef OPENSSL_IS_BORINGSSL
+    tcn_Throw(e, "Not supported");
+#else
+    SSL_set_renegotiate_mode(ssl_, (enum ssl_renegotiate_mode_t) mode);
+#endif
+}
+
 // JNI Method Registration Table Begin
 static const JNINativeMethod method_table[] = {
   { TCN_METHOD_TABLE_ENTRY(bioLengthByteBuffer, (J)I, SSL) },
@@ -2646,7 +2685,7 @@ static const JNINativeMethod method_table[] = {
   { TCN_METHOD_TABLE_ENTRY(getShutdown, (J)I, SSL) },
   { TCN_METHOD_TABLE_ENTRY(setShutdown, (JI)V, SSL) },
   { TCN_METHOD_TABLE_ENTRY(freeSSL, (J)V, SSL) },
-  { TCN_METHOD_TABLE_ENTRY(bioNewByteBuffer, (JI)J, SSL) },
+  { TCN_METHOD_TABLE_ENTRY(bioSetFd, (JI)V, SSL) },
   { TCN_METHOD_TABLE_ENTRY(bioNewByteBuffer, (JI)J, SSL) },
   { TCN_METHOD_TABLE_ENTRY(freeBIO, (J)V, SSL) },
   { TCN_METHOD_TABLE_ENTRY(shutdownSSL, (J)I, SSL) },
@@ -2672,6 +2711,8 @@ static const JNINativeMethod method_table[] = {
   { TCN_METHOD_TABLE_ENTRY(getMaxWrapOverhead, (J)I, SSL) },
   { TCN_METHOD_TABLE_ENTRY(getCiphers, (J)[Ljava/lang/String;, SSL) },
   { TCN_METHOD_TABLE_ENTRY(setCipherSuites, (JLjava/lang/String;Z)Z, SSL) },
+  { TCN_METHOD_TABLE_ENTRY(setCurvesList0, (JLjava/lang/String;)Z, SSL) },
+  { TCN_METHOD_TABLE_ENTRY(setCurves0, (J[I)Z, SSL) },
   { TCN_METHOD_TABLE_ENTRY(getSessionId, (J)[B, SSL) },
   { TCN_METHOD_TABLE_ENTRY(getHandshakeCount, (J)I, SSL) },
   { TCN_METHOD_TABLE_ENTRY(clearError, ()V, SSL) },
@@ -2698,7 +2739,8 @@ static const JNINativeMethod method_table[] = {
   { TCN_METHOD_TABLE_ENTRY(getServerRandom, (J)[B, SSL) },
   { TCN_METHOD_TABLE_ENTRY(getTask, (J)Ljava/lang/Runnable;, SSL) },
   { TCN_METHOD_TABLE_ENTRY(getSession, (J)J, SSL) },
-  { TCN_METHOD_TABLE_ENTRY(isSessionReused, (J)Z, SSL) }
+  { TCN_METHOD_TABLE_ENTRY(isSessionReused, (J)Z, SSL) },
+  { TCN_METHOD_TABLE_ENTRY(setRenegotiateMode, (JI)V, SSL) }
 };
 
 static const jint method_table_size = sizeof(method_table) / sizeof(method_table[0]);

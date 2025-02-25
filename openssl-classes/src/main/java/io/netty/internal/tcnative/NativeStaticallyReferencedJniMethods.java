@@ -42,6 +42,8 @@ final class NativeStaticallyReferencedJniMethods {
     static native int sslOpNoTLSv12();
     static native int sslOpNoTLSv13();
     static native int sslOpNoTicket();
+    static native int sslOpAllowUnsafeLegacyRenegotiation();
+    static native int sslOpLegacyServerConnect();
 
     /**
      * Options not defined in the OpenSSL docs but may impact security.
@@ -75,6 +77,7 @@ final class NativeStaticallyReferencedJniMethods {
     static native int sslErrorWantAccept();
 
     static native int sslMaxPlaintextLength();
+    static native int sslMaxEncryptedLength();
     static native int sslMaxRecordLength();
 
     static native int x509CheckFlagAlwaysCheckSubject();
@@ -166,4 +169,16 @@ final class NativeStaticallyReferencedJniMethods {
     static native int sslSignRsaPssRsaeSha512();
     static native int sslSignEd25519();
     static native int sslSignRsaPkcs1Md5Sha1();
+
+    static native int sslRenegotiateNever();
+    static native int sslRenegotiateOnce();
+    static native int sslRenegotiateFreely();
+    static native int sslRenegotiateIgnore();
+    static native int sslRenegotiateExplicit();
+    static native int sslCertCompressionDirectionCompress();
+    static native int sslCertCompressionDirectionDecompress();
+    static native int sslCertCompressionDirectionBoth();
+    static native int tlsExtCertCompressionZlib();
+    static native int tlsExtCertCompressionBrotli();
+    static native int tlsExtCertCompressionZstd();
 }

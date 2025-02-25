@@ -74,6 +74,8 @@ public final class SSL {
     public static final int SSL_OP_NO_TICKET = sslOpNoTicket();
 
     public static final int SSL_OP_NO_COMPRESSION = sslOpNoCompression();
+    public static final int SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION = sslOpAllowUnsafeLegacyRenegotiation();
+    public static final int SSL_OP_LEGACY_SERVER_CONNECT = sslOpLegacyServerConnect();
 
     public static final int SSL_MODE_CLIENT         = 0;
     public static final int SSL_MODE_SERVER         = 1;
@@ -96,6 +98,8 @@ public final class SSL {
     public static final int SSL_MODE_RELEASE_BUFFERS                = sslModeReleaseBuffers();
     public static final int SSL_MODE_ENABLE_FALSE_START             = sslModeEnableFalseStart();
     public static final int SSL_MAX_PLAINTEXT_LENGTH = sslMaxPlaintextLength();
+    public static final int SSL_MAX_ENCRYPTED_LENGTH = sslMaxEncryptedLength();
+
     /**
      * The <a href="https://tools.ietf.org/html/rfc5246#section-6.2.1">TLS 1.2 RFC</a> defines the maximum length to be
      * {@link #SSL_MAX_PLAINTEXT_LENGTH}, but there are some implementations such as
@@ -109,6 +113,16 @@ public final class SSL {
     public static final int X509_CHECK_FLAG_NO_WILD_CARDS = x509CheckFlagDisableWildCards();
     public static final int X509_CHECK_FLAG_NO_PARTIAL_WILD_CARDS = x509CheckFlagNoPartialWildCards();
     public static final int X509_CHECK_FLAG_MULTI_LABEL_WILDCARDS = x509CheckFlagMultiLabelWildCards();
+
+    public static final int SSL_RENEGOTIATE_NEVER = sslRenegotiateNever();
+    public static final int SSL_RENEGOTIATE_ONCE = sslRenegotiateOnce();
+    public static final int SSL_RENEGOTIATE_FREELY = sslRenegotiateFreely();
+    public static final int SSL_RENEGOTIATE_IGNORE = sslRenegotiateIgnore();
+    public static final int SSL_RENEGOTIATE_EXPLICIT = sslRenegotiateExplicit();
+
+    public static final int SSL_CERT_COMPRESSION_DIRECTION_COMPRESS = sslCertCompressionDirectionCompress();
+    public static final int SSL_CERT_COMPRESSION_DIRECTION_DECOMPRESS = sslCertCompressionDirectionDecompress();
+    public static final int SSL_CERT_COMPRESSION_DIRECTION_BOTH = sslCertCompressionDirectionBoth();
 
     /* Return OpenSSL version number */
     public static native int version();
@@ -206,6 +220,17 @@ public final class SSL {
      *         The memory is owned by {@code ssl} and will be cleaned up by {@link #freeSSL(long)}.
      */
     public static native long bioNewByteBuffer(long ssl, int nonApplicationBufferSize);
+
+    /**
+     * Sets the socket file descriptor
+     *
+     * @param ssl the SSL instance (SSL *)
+     * @param fd the file descriptor of the socket used for the given SSL connection
+     *
+     * @deprecated This is not supported official by OpenSSL or BoringSSL so its just a no op.
+     */
+    @Deprecated
+    public static native void bioSetFd(long ssl, int fd);
 
     /**
      * Set the memory location which that OpenSSL's internal BIO will use to write encrypted data to, or read encrypted
@@ -537,6 +562,53 @@ public final class SSL {
      */
     public static native boolean setCipherSuites(long ssl, String ciphers, boolean tlsv13)
             throws Exception;
+
+    /**
+     * Sets the curves to use.
+     *
+     * See <a href="https://www.openssl.org/docs/man1.1.1/man3/SSL_set1_curves_list.html">SSL_set1_curves_list</a>.
+     * @param ssl the SSL instance (SSL *)
+     * @param curves the curves to use.
+     * @return {@code true} if successful, {@code false} otherwise.
+     */
+    public static boolean setCurvesList(long ssl, String... curves) {
+        if (curves == null) {
+            throw new NullPointerException("curves");
+        }
+        if (curves.length == 0) {
+            throw new IllegalArgumentException();
+        }
+        StringBuilder sb = new StringBuilder();
+        for (String curve: curves) {
+            sb.append(curve);
+            // Curves are separated by : as explained in the manpage.
+            sb.append(':');
+        }
+        sb.setLength(sb.length() - 1);
+        return setCurvesList0(ssl, sb.toString());
+    }
+
+    private static native boolean setCurvesList0(long ctx, String curves);
+
+    /**
+     * Sets the curves to use.
+     *
+     * See <a href="https://www.openssl.org/docs/man1.1.1/man3/SSL_set1_curves.html">SSL_set1_curves</a>.
+     * @param ssl the SSL instance (SSL *)
+     * @param curves the curves to use.
+     * @return {@code true} if successful, {@code false} otherwise.
+     */
+    public static boolean setCurves(long ssl, int[] curves) {
+        if (curves == null) {
+            throw new NullPointerException("curves");
+        }
+        if (curves.length == 0) {
+            throw new IllegalArgumentException();
+        }
+        return setCurves0(ssl, curves);
+    }
+    private static native boolean setCurves0(long ctx, int[] curves);
+
     /**
      * Returns the ID of the session as byte array representation.
      *
@@ -887,4 +959,15 @@ public final class SSL {
      * @return the SSL_SESSION instance (SSL_SESSION *) used
      */
     public static native long getSession(long ssl);
+
+    /**
+     * Allow to set the renegotiation mode that is used. This is only support by {@code BoringSSL}.
+     *
+     * See <a href="https://boringssl.googlesource.com/boringssl/+/refs/heads/master/include/openssl/ssl.h#4081">
+     *     SSL_set_renegotiate_mode</a>..
+     * @param ssl the SSL instance (SSL *)
+     * @param mode  the mode.
+     * @throws Exception thrown if some error happens.
+     */
+    public static native void setRenegotiateMode(long ssl, int mode) throws Exception;
 }

@@ -19,7 +19,7 @@
   <parent>
     <groupId>io.netty</groupId>
     <artifactId>netty-tcnative-parent</artifactId>
-    <version>2.0.41.Final-SNAPSHOT</version>
+    <version>2.0.71.Final-SNAPSHOT</version>
   </parent>
   <artifactId>netty-tcnative</artifactId>
   <packaging>jar</packaging>
@@ -34,6 +34,9 @@
     <compileLibrary>true</compileLibrary>
     <linkStatic>false</linkStatic>
     <nativeSourceDirectory />
+    <skipJapicmp>true</skipJapicmp>
+    <!-- We need to use the same module name for all our "native" impls as only one should be loaded -->
+    <javaModuleName>${javaDefaultModuleName}</javaModuleName>
   </properties>
 
   <build>
@@ -45,7 +48,7 @@
           <configuration>
             <archive>
               <manifestEntries>
-                <Automatic-Module-Name>io.netty.tcnative.openssl.dynamic</Automatic-Module-Name>
+                <Fragment-Host>io.netty.tcnative-classes</Fragment-Host>
               </manifestEntries>
             </archive>
           </configuration>
@@ -74,7 +77,7 @@
             <configuration>
               <target>
                 <copy todir="${nativeJarWorkdir}">
-                  <zipfileset src="${defaultJarFile}" />
+                  <zipfileset src="${defaultJarFile}" excludes="META-INF/versions/**/module-info.class" />
                 </copy>
                 <copy todir="${nativeJarWorkdir}" includeEmptyDirs="false">
                   <zipfileset dir="${nativeLibOnlyDir}/META-INF/native" />
@@ -90,7 +93,12 @@
                   <fileset dir="${nativeJarWorkdir}/META-INF/native/" />
                   <globmapper from="netty_tcnative.*" to="netty_tcnative_${os.detected.name}_${jniArch}.*" />
                 </move>
-                 
+
+                <!-- Append the Bundle-NativeCode section -->
+                <manifest file="${nativeJarWorkdir}/META-INF/MANIFEST.MF" mode="update">
+                  <attribute name="Bundle-NativeCode" value="${tcnativeManifest}" />
+                </manifest>
+
                 <jar destfile="${nativeJarFile}" manifest="${nativeJarWorkdir}/META-INF/MANIFEST.MF" basedir="${nativeJarWorkdir}" index="true" excludes="META-INF/MANIFEST.MF,META-INF/INDEX.LIST" />
                 <!-- Adjust the classifier used for different OS distributions which provide differently-built openSSL libraries -->
                 <condition property="classifier" value="${jniClassifier}-fedora">
@@ -121,7 +129,7 @@
       <!-- Generate the .so/.dynlib/.dll as part of the build. -->
       <plugin>
         <groupId>org.fusesource.hawtjni</groupId>
-        <artifactId>maven-hawtjni-plugin</artifactId>
+        <artifactId>hawtjni-maven-plugin</artifactId>
         <executions>
           <execution>
             <id>build-native-lib</id>
@@ -144,8 +152,47 @@
           </execution>
         </executions>
       </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <executions>
+          <!-- We must generate a -javadoc JAR file to publish on Maven Central -->
+          <execution>
+            <id>empty-javadoc-jar</id>
+            <phase>package</phase>
+            <goals>
+              <goal>jar</goal>
+            </goals>
+            <configuration>
+              <classifier>javadoc</classifier>
+              <classesDirectory>${basedir}/javadoc</classesDirectory>
+            </configuration>
+          </execution>
+          <!-- We must generate a -source JAR file to publish on Maven Central -->
+          <execution>
+            <id>sources-jar</id>
+            <phase>package</phase>
+            <goals>
+              <goal>jar</goal>
+            </goals>
+            <configuration>
+              <classifier>sources</classifier>
+              <classesDirectory>${basedir}/src/main/c</classesDirectory>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
     </plugins>
   </build>
+
+  <dependencies>
+    <dependency>
+      <groupId>${project.groupId}</groupId>
+      <artifactId>netty-tcnative-classes</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+  </dependencies>
 
   <profiles>
     <!-- Make sure all required environment variables are present on Windows. -->
@@ -196,17 +243,18 @@
 
     <!-- Make sure all required environment variables are present on Windows. -->
     <profile>
-      <id>osx</id>
+      <id>mac-x86_64</id>
       <activation>
         <os>
           <family>mac</family>
+          <arch>x86_64</arch>
         </os>
       </activation>
       <build>
         <plugins>
           <plugin>
             <groupId>org.fusesource.hawtjni</groupId>
-            <artifactId>maven-hawtjni-plugin</artifactId>
+            <artifactId>hawtjni-maven-plugin</artifactId>
             <executions>
               <execution>
                 <id>build-native-lib</id>
@@ -218,7 +266,8 @@
                   <forceConfigure>${forceConfigure}</forceConfigure>
                   <configureArgs>
                     <configureArg>${macOsxDeploymentTarget}</configureArg>
-                    <configureArg>--with-apr=/usr/local/opt/apr/libexec/</configureArg>
+                    <configureArg>--with-apr=/usr/local/opt/apr/</configureArg>
+                    <configureArg>--with-ssl=/usr/local/opt/openssl@1.1/</configureArg>
                   </configureArgs>
                 </configuration>
                 <goals>
@@ -232,7 +281,45 @@
         </plugins>
       </build>
     </profile>
-
+    <profile>
+      <id>mac-aarch64</id>
+      <activation>
+        <os>
+          <family>mac</family>
+          <arch>aarch64</arch>
+        </os>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.fusesource.hawtjni</groupId>
+            <artifactId>hawtjni-maven-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>build-native-lib</id>
+                <configuration>
+                  <name>netty_tcnative</name>
+                  <nativeSourceDirectory>${generatedSourcesDir}/c</nativeSourceDirectory>
+                  <libDirectory>${nativeLibOnlyDir}</libDirectory>
+                  <forceAutogen>${forceAutogen}</forceAutogen>
+                  <forceConfigure>${forceConfigure}</forceConfigure>
+                  <configureArgs>
+                    <configureArg>${macOsxDeploymentTarget}</configureArg>
+                    <configureArg>--with-apr=/opt/homebrew/opt/apr/</configureArg>
+                    <configureArg>--with-ssl=/opt/homebrew/opt/openssl@1.1/</configureArg>
+                  </configureArgs>
+                </configuration>
+                <goals>
+                  <goal>generate</goal>
+                  <goal>build</goal>
+                </goals>
+                <phase>compile</phase>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
     <profile>
       <id>linux-aarch64</id>
 
@@ -242,6 +329,7 @@
         <jniClassifier>${os.detected.name}-aarch_64</jniClassifier>
         <nativeLibOsParts>${os.detected.name}_aarch_64</nativeLibOsParts>
         <jniArch>aarch_64</jniArch>
+        <javaModuleNameClassifier>${os.detected.name}.aarch_64</javaModuleNameClassifier>
       </properties>
 
       <build>
@@ -317,7 +405,7 @@
           <!-- Generate the .so/.dynlib/.dll as part of the build. -->
           <plugin>
             <groupId>org.fusesource.hawtjni</groupId>
-            <artifactId>maven-hawtjni-plugin</artifactId>
+            <artifactId>hawtjni-maven-plugin</artifactId>
             <executions>
               <execution>
                 <id>build-native-lib</id>

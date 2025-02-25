@@ -65,6 +65,9 @@
 #include <openssl/x509v3.h>
 #include <openssl/hmac.h>
 #include <openssl/dh.h>
+#if OPENSSL_VERSION_NUMBER >= 0x30000000
+#include <openssl/core_names.h>
+#endif
 
 #define ERR_LEN 256
 
@@ -170,6 +173,10 @@ extern const char* TCN_UNKNOWN_AUTH_METHOD;
 #define SSL_SESSION_TICKET_HMAC_KEY_LEN 16
 #define SSL_SESSION_TICKET_KEY_SIZE     48
 
+#define SSL_CERT_COMPRESSION_DIRECTION_COMPRESS     0x01
+#define SSL_CERT_COMPRESSION_DIRECTION_DECOMPRESS   0x02
+#define SSL_CERT_COMPRESSION_DIRECTION_BOTH         0x03
+
 extern void *SSL_temp_keys[SSL_TMP_KEY_MAX];
 
 // HACK!
@@ -267,11 +274,30 @@ extern void *SSL_temp_keys[SSL_TMP_KEY_MAX];
 #define SSL_ERROR_WANT_CERTIFICATE_VERIFY       -1
 #endif
 
+#ifndef TLSEXT_cert_compression_zlib
+// See https://datatracker.ietf.org/doc/html/rfc8879#section-3
+#define TLSEXT_cert_compression_zlib            1
+#endif
+
+#ifndef TLSEXT_cert_compression_brotli
+// See https://datatracker.ietf.org/doc/html/rfc8879#section-3
+#define TLSEXT_cert_compression_brotli          2
+#endif
+
+#ifndef TLSEXT_cert_compression_zstd
+// See https://datatracker.ietf.org/doc/html/rfc8879#section-3
+#define TLSEXT_cert_compression_zstd            3
+#endif
+
 typedef struct tcn_ssl_ctxt_t tcn_ssl_ctxt_t;
 
 typedef struct {
     unsigned char   key_name[SSL_SESSION_TICKET_KEY_NAME_LEN];
-    unsigned char   hmac_key[SSL_SESSION_TICKET_HMAC_KEY_LEN];
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
+    unsigned char hmac_key[SSL_SESSION_TICKET_HMAC_KEY_LEN];
+#else
+    OSSL_PARAM mac_params[3];
+#endif
     unsigned char   aes_key[SSL_SESSION_TICKET_AES_KEY_LEN];
 } tcn_ssl_ticket_key_t;
 
@@ -319,6 +345,21 @@ struct tcn_ssl_ctxt_t {
     jobject                  ssl_private_key_method;
     jmethodID                ssl_private_key_sign_method;
     jmethodID                ssl_private_key_decrypt_method;
+
+    jobject                  ssl_cert_compression_zlib_algorithm;
+    jmethodID                ssl_cert_compression_zlib_compress_method;
+    jmethodID                ssl_cert_compression_zlib_decompress_method;
+
+    jobject                  ssl_cert_compression_brotli_algorithm;
+    jmethodID                ssl_cert_compression_brotli_compress_method;
+    jmethodID                ssl_cert_compression_brotli_decompress_method;
+
+    jobject                  ssl_cert_compression_zstd_algorithm;
+    jmethodID                ssl_cert_compression_zstd_compress_method;
+    jmethodID                ssl_cert_compression_zstd_decompress_method;
+
+    jobject                  keylog_callback;
+    jmethodID                keylog_callback_method;
 #endif // OPENSSL_IS_BORINGSSL
 
     tcn_ssl_verify_config_t  verify_config;
@@ -367,7 +408,7 @@ struct tcn_ssl_state_t {
     int handshakeCount;
     tcn_ssl_ctxt_t *ctx;
     tcn_ssl_task_t* ssl_task;
-    tcn_ssl_verify_config_t* verify_config;
+    tcn_ssl_verify_config_t verify_config;
 };
 
 #define TCN_GET_SSL_CTX(ssl, C)                             \
@@ -391,6 +432,7 @@ void       *tcn_SSL_CTX_get_app_state(const SSL_CTX *);
 void        tcn_SSL_CTX_set_app_state(SSL_CTX *, void *);
 
 int         tcn_SSL_password_callback(char *, int, int, void *);
+#if OPENSSL_VERSION_NUMBER < 0x30000000
 DH         *tcn_SSL_dh_get_tmp_param(int);
 DH         *tcn_SSL_callback_tmp_DH(SSL *, int, int);
 // The following provided callbacks will always return DH of a given length.
@@ -399,6 +441,7 @@ DH         *tcn_SSL_callback_tmp_DH_512(SSL *, int, int);
 DH         *tcn_SSL_callback_tmp_DH_1024(SSL *, int, int);
 DH         *tcn_SSL_callback_tmp_DH_2048(SSL *, int, int);
 DH         *tcn_SSL_callback_tmp_DH_4096(SSL *, int, int);
+#endif
 int         tcn_SSL_CTX_use_certificate_chain(SSL_CTX *, const char *, bool);
 int         tcn_SSL_CTX_use_certificate_chain_bio(SSL_CTX *, BIO *, bool);
 int         tcn_SSL_CTX_use_client_CA_bio(SSL_CTX *, BIO *);
@@ -438,6 +481,7 @@ enum ssl_verify_result_t tcn_SSL_cert_custom_verify(SSL* ssl, uint8_t *out_alert
 
 #if defined(__GNUC__) || defined(__GNUG__)
     // only supported with GCC, this will be used to support different openssl versions at the same time.
+#ifndef OPENSSL_IS_BORINGSSL
     extern int SSL_CTX_set_alpn_protos(SSL_CTX *ctx, const unsigned char *protos,
            unsigned protos_len) __attribute__((weak));
     extern void SSL_CTX_set_alpn_select_cb(SSL_CTX *ctx, int (*cb) (SSL *ssl, const unsigned char **out,
@@ -445,8 +489,8 @@ enum ssl_verify_result_t tcn_SSL_cert_custom_verify(SSL* ssl, uint8_t *out_alert
            void *arg), void *arg) __attribute__((weak));
     extern void SSL_get0_alpn_selected(const SSL *ssl, const unsigned char **data,
            unsigned *len) __attribute__((weak));
+    extern void SSL_CTX_set_cert_cb(SSL_CTX *c, int (*cert_cb)(SSL *ssl, void *arg), void *arg) __attribute__((weak));
 
-#ifndef OPENSSL_IS_BORINGSSL
     extern X509_VERIFY_PARAM *SSL_get0_param(SSL *ssl) __attribute__((weak));
     extern void X509_VERIFY_PARAM_set_hostflags(X509_VERIFY_PARAM *param, unsigned int flags) __attribute__((weak));
     extern int X509_VERIFY_PARAM_set1_host(X509_VERIFY_PARAM *param, const char *name, size_t namelen) __attribute__((weak));
@@ -455,7 +499,22 @@ enum ssl_verify_result_t tcn_SSL_cert_custom_verify(SSL* ssl, uint8_t *out_alert
 #endif // OPENSSL_IS_BORINGSSL
 
     extern int SSL_get_sigalgs(SSL *s, int idx, int *psign, int *phash, int *psignhash, unsigned char *rsig, unsigned char *rhash) __attribute__((weak));
-    extern void SSL_CTX_set_cert_cb(SSL_CTX *c, int (*cert_cb)(SSL *ssl, void *arg), void *arg) __attribute__((weak));
 #endif
+
+#ifdef OPENSSL_IS_BORINGSSL
+#define tcn_SSL_CTX_set1_curves_list(ctx, s) SSL_CTX_set1_curves_list(ctx, s)
+#define tcn_SSL_set1_curves_list(ssl, s) SSL_set1_curves_list(ssl, s)
+#define tcn_SSL_set1_curves(ssl, clist, clistlen) SSL_set1_curves(ssl, clist, clistlen)
+#else
+#ifndef SSL_CTRL_SET_GROUPS_LIST
+#define SSL_CTRL_SET_GROUPS_LIST                92
+#endif // SSL_CTRL_SET_GROUPS_LIST
+#ifndef SSL_CTRL_SET_GROUPS
+#define SSL_CTRL_SET_GROUPS                     91
+#endif // SSL_CTRL_SET_GROUPS
+#define tcn_SSL_CTX_set1_curves_list(ctx, s) SSL_CTX_ctrl(ctx, SSL_CTRL_SET_GROUPS_LIST, 0, (char *)(s))
+#define tcn_SSL_set1_curves_list(s, str) SSL_ctrl(s, SSL_CTRL_SET_GROUPS_LIST, 0, (char *)(str))
+#define tcn_SSL_set1_curves(s, glist, glistlen) SSL_ctrl(s, SSL_CTRL_SET_GROUPS, glistlen,(char *)(glist))
+#endif // OPENSSL_IS_BORINGSSL
 
 #endif /* SSL_PRIVATE_H */

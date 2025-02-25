@@ -56,6 +56,14 @@ TCN_IMPLEMENT_CALL(jint, NativeStaticallyReferencedJniMethods, sslOpNoCompressio
     return SSL_OP_NO_COMPRESSION;
 }
 
+TCN_IMPLEMENT_CALL(jint, NativeStaticallyReferencedJniMethods, sslOpAllowUnsafeLegacyRenegotiation)(TCN_STDARGS) {
+    return SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION;
+}
+
+TCN_IMPLEMENT_CALL(jint, NativeStaticallyReferencedJniMethods, sslOpLegacyServerConnect)(TCN_STDARGS) {
+    return SSL_OP_LEGACY_SERVER_CONNECT;
+}
+
 TCN_IMPLEMENT_CALL(jint, NativeStaticallyReferencedJniMethods, sslSessCacheOff)(TCN_STDARGS) {
     return SSL_SESS_CACHE_OFF;
 }
@@ -146,6 +154,10 @@ TCN_IMPLEMENT_CALL(jint, NativeStaticallyReferencedJniMethods, sslErrorWantAccep
 
 TCN_IMPLEMENT_CALL(jint, NativeStaticallyReferencedJniMethods, sslMaxPlaintextLength)(TCN_STDARGS) {
     return SSL3_RT_MAX_PLAIN_LENGTH;
+}
+
+TCN_IMPLEMENT_CALL(jint, NativeStaticallyReferencedJniMethods, sslMaxEncryptedLength)(TCN_STDARGS) {
+    return SSL3_RT_MAX_ENCRYPTED_LENGTH;
 }
 
 TCN_IMPLEMENT_CALL(jint, NativeStaticallyReferencedJniMethods, sslMaxRecordLength)(TCN_STDARGS) {
@@ -559,6 +571,71 @@ TCN_IMPLEMENT_CALL(jint, NativeStaticallyReferencedJniMethods, sslSignRsaPkcs1Md
     return SSL_SIGN_RSA_PKCS1_MD5_SHA1;
 }
 
+TCN_IMPLEMENT_CALL(jint, NativeStaticallyReferencedJniMethods, sslRenegotiateNever)(TCN_STDARGS) {
+#ifdef OPENSSL_IS_BORINGSSL
+    return (jint) ssl_renegotiate_never;
+#else
+    return 0;
+#endif
+}
+
+TCN_IMPLEMENT_CALL(jint, NativeStaticallyReferencedJniMethods, sslRenegotiateOnce)(TCN_STDARGS) {
+#ifdef OPENSSL_IS_BORINGSSL
+    return (jint) ssl_renegotiate_once;
+#else
+    return 0;
+#endif
+}
+
+TCN_IMPLEMENT_CALL(jint, NativeStaticallyReferencedJniMethods, sslRenegotiateFreely)(TCN_STDARGS) {
+#ifdef OPENSSL_IS_BORINGSSL
+    return (jint) ssl_renegotiate_freely;
+#else
+    return 0;
+#endif
+}
+
+
+TCN_IMPLEMENT_CALL(jint, NativeStaticallyReferencedJniMethods, sslRenegotiateIgnore)(TCN_STDARGS) {
+#ifdef OPENSSL_IS_BORINGSSL
+    return (jint) ssl_renegotiate_ignore;
+#else
+    return 0;
+#endif
+}
+
+TCN_IMPLEMENT_CALL(jint, NativeStaticallyReferencedJniMethods, sslRenegotiateExplicit)(TCN_STDARGS) {
+#ifdef OPENSSL_IS_BORINGSSL
+    return (jint) ssl_renegotiate_explicit;
+#else
+    return 0;
+#endif
+}
+
+TCN_IMPLEMENT_CALL(jint, NativeStaticallyReferencedJniMethods, sslCertCompressionDirectionCompress)(TCN_STDARGS) {
+    return SSL_CERT_COMPRESSION_DIRECTION_COMPRESS;
+}
+
+TCN_IMPLEMENT_CALL(jint, NativeStaticallyReferencedJniMethods, sslCertCompressionDirectionDecompress)(TCN_STDARGS) {
+    return SSL_CERT_COMPRESSION_DIRECTION_DECOMPRESS;
+}
+
+TCN_IMPLEMENT_CALL(jint, NativeStaticallyReferencedJniMethods, sslCertCompressionDirectionBoth)(TCN_STDARGS) {
+    return SSL_CERT_COMPRESSION_DIRECTION_BOTH;
+}
+
+TCN_IMPLEMENT_CALL(jint, NativeStaticallyReferencedJniMethods, tlsExtCertCompressionZlib)(TCN_STDARGS) {
+    return TLSEXT_cert_compression_zlib;
+}
+
+TCN_IMPLEMENT_CALL(jint, NativeStaticallyReferencedJniMethods, tlsExtCertCompressionBrotli)(TCN_STDARGS) {
+    return TLSEXT_cert_compression_brotli;
+}
+
+TCN_IMPLEMENT_CALL(jint, NativeStaticallyReferencedJniMethods, tlsExtCertCompressionZstd)(TCN_STDARGS) {
+    return TLSEXT_cert_compression_zstd;
+}
+
 // JNI Method Registration Table Begin
 static const JNINativeMethod method_table[] = {
   { TCN_METHOD_TABLE_ENTRY(sslOpCipherServerPreference, ()I, NativeStaticallyReferencedJniMethods) },
@@ -570,6 +647,8 @@ static const JNINativeMethod method_table[] = {
   { TCN_METHOD_TABLE_ENTRY(sslOpNoTLSv13, ()I, NativeStaticallyReferencedJniMethods) },
   { TCN_METHOD_TABLE_ENTRY(sslOpNoTicket, ()I, NativeStaticallyReferencedJniMethods) },
   { TCN_METHOD_TABLE_ENTRY(sslOpNoCompression, ()I, NativeStaticallyReferencedJniMethods) },
+  { TCN_METHOD_TABLE_ENTRY(sslOpAllowUnsafeLegacyRenegotiation, ()I, NativeStaticallyReferencedJniMethods) },
+  { TCN_METHOD_TABLE_ENTRY(sslOpLegacyServerConnect, ()I, NativeStaticallyReferencedJniMethods) },
   { TCN_METHOD_TABLE_ENTRY(sslSessCacheOff, ()I, NativeStaticallyReferencedJniMethods) },
   { TCN_METHOD_TABLE_ENTRY(sslSessCacheServer, ()I, NativeStaticallyReferencedJniMethods) },
   { TCN_METHOD_TABLE_ENTRY(sslSessCacheClient, ()I, NativeStaticallyReferencedJniMethods) },
@@ -593,6 +672,7 @@ static const JNINativeMethod method_table[] = {
   { TCN_METHOD_TABLE_ENTRY(sslErrorWantConnect, ()I, NativeStaticallyReferencedJniMethods) },
   { TCN_METHOD_TABLE_ENTRY(sslErrorWantAccept, ()I, NativeStaticallyReferencedJniMethods) },
   { TCN_METHOD_TABLE_ENTRY(sslMaxPlaintextLength, ()I, NativeStaticallyReferencedJniMethods) },
+  { TCN_METHOD_TABLE_ENTRY(sslMaxEncryptedLength, ()I, NativeStaticallyReferencedJniMethods) },
   { TCN_METHOD_TABLE_ENTRY(sslMaxRecordLength, ()I, NativeStaticallyReferencedJniMethods) },
   { TCN_METHOD_TABLE_ENTRY(x509CheckFlagAlwaysCheckSubject, ()I, NativeStaticallyReferencedJniMethods) },
   { TCN_METHOD_TABLE_ENTRY(x509CheckFlagDisableWildCards, ()I, NativeStaticallyReferencedJniMethods) },
@@ -679,7 +759,18 @@ static const JNINativeMethod method_table[] = {
   { TCN_METHOD_TABLE_ENTRY(sslSignRsaPssRsaeSha384, ()I, NativeStaticallyReferencedJniMethods) },
   { TCN_METHOD_TABLE_ENTRY(sslSignRsaPssRsaeSha512, ()I, NativeStaticallyReferencedJniMethods) },
   { TCN_METHOD_TABLE_ENTRY(sslSignEd25519, ()I, NativeStaticallyReferencedJniMethods) },
-  { TCN_METHOD_TABLE_ENTRY(sslSignRsaPkcs1Md5Sha1, ()I, NativeStaticallyReferencedJniMethods) }
+  { TCN_METHOD_TABLE_ENTRY(sslSignRsaPkcs1Md5Sha1, ()I, NativeStaticallyReferencedJniMethods) },
+  { TCN_METHOD_TABLE_ENTRY(sslRenegotiateNever, ()I, NativeStaticallyReferencedJniMethods) },
+  { TCN_METHOD_TABLE_ENTRY(sslRenegotiateOnce, ()I, NativeStaticallyReferencedJniMethods) },
+  { TCN_METHOD_TABLE_ENTRY(sslRenegotiateFreely, ()I, NativeStaticallyReferencedJniMethods) },
+  { TCN_METHOD_TABLE_ENTRY(sslRenegotiateIgnore, ()I, NativeStaticallyReferencedJniMethods) },
+  { TCN_METHOD_TABLE_ENTRY(sslRenegotiateExplicit, ()I, NativeStaticallyReferencedJniMethods) },
+  { TCN_METHOD_TABLE_ENTRY(sslCertCompressionDirectionCompress, ()I, NativeStaticallyReferencedJniMethods) },
+  { TCN_METHOD_TABLE_ENTRY(sslCertCompressionDirectionDecompress, ()I, NativeStaticallyReferencedJniMethods) },
+  { TCN_METHOD_TABLE_ENTRY(sslCertCompressionDirectionBoth, ()I, NativeStaticallyReferencedJniMethods) },
+  { TCN_METHOD_TABLE_ENTRY(tlsExtCertCompressionZlib, ()I, NativeStaticallyReferencedJniMethods) },
+  { TCN_METHOD_TABLE_ENTRY(tlsExtCertCompressionBrotli, ()I, NativeStaticallyReferencedJniMethods) },
+  { TCN_METHOD_TABLE_ENTRY(tlsExtCertCompressionZstd, ()I, NativeStaticallyReferencedJniMethods) }
 };
 
 static const jint method_table_size = sizeof(method_table) / sizeof(method_table[0]);
